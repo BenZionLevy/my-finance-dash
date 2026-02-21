@@ -4,8 +4,8 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-import io
 from scipy import stats
+import io
 
 st.set_page_config(page_title="ניתוח קורלציות מקצועי", layout="wide", page_icon="📊")
 
@@ -356,9 +356,10 @@ with t1:
     st.markdown("<p class='section-title'>טבלת נתונים מפורטת (מוכנה לאקסל)</p>", unsafe_allow_html=True)
     st.dataframe(summary_df, use_container_width=True, height=250)
 
-st.markdown("<p class='section-title'>ייצוא ואימות</p>", unsafe_allow_html=True)
+with t2:
+    st.markdown("<p class='section-title'>ייצוא ואימות</p>", unsafe_allow_html=True)
     
-    # ייצוא לאקסל (XLSX) במקום CSV לפתרון בעיות קידוד בעברית
+    # ייצוא לאקסל (XLSX)
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
         summary_df.to_excel(writer, index=False, sheet_name='Correlation Data')
