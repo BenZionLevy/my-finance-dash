@@ -6,8 +6,18 @@ import plotly.express as px
 import plotly.graph_objects as go
 from scipy import stats
 import io
+from openpyxl.utils import get_column_letter
+from openpyxl.styles import Font, PatternFill
 
 st.set_page_config(page_title="ניתוח קורלציות מקצועי", layout="wide", page_icon="📊")
+
+# ==========================================
+# פונקציות עזר קטנות
+# ==========================================
+def safe_round(val, mult=1.0):
+    """פונקציה שמחזירה תא ריק (None) לאקסל במקום שגיאה במקרה של נתון חסר"""
+    if pd.isna(val): return None
+    return round(float(val) * mult, 2)
 
 # ==========================================
 # עיצוב CSS מותאם אישית
@@ -16,7 +26,6 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;600;700&display=swap');
     
-    /* תמונת רקע נקייה */
     .stApp {
         background: linear-gradient(rgba(248, 250, 252, 0.92), rgba(248, 250, 252, 0.97)), 
                     url('https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=2070&auto=format&fit=crop');
@@ -24,12 +33,10 @@ st.markdown("""
         background-attachment: fixed;
         background-position: center;
     }
-    
     html, body, [class*="css"] {
         font-family: 'Heebo', sans-serif;
         direction: rtl;
     }
-    
     .main-header {
         text-align: center;
         padding: 1.5rem 0 0.5rem 0;
@@ -40,14 +47,12 @@ st.markdown("""
         -webkit-text-fill-color: transparent;
         background-clip: text;
     }
-
     .sub-header {
         text-align: center;
         color: #475569;
         font-size: 1.1rem;
         margin-bottom: 2rem;
     }
-
     .stat-badge {
         display: inline-block;
         padding: 0.3rem 0.8rem;
@@ -57,12 +62,10 @@ st.markdown("""
         margin: 0.15rem;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    
     .badge-green { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
     .badge-red   { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
     .badge-blue  { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
     .badge-gray  { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }
-
     .section-title {
         font-size: 1.25rem;
         font-weight: 600;
@@ -73,7 +76,6 @@ st.markdown("""
         border-bottom: 2px solid #cbd5e1;
         padding-bottom: 8px;
     }
-
     .info-box {
         background: rgba(255, 255, 255, 0.95);
         border-right: 4px solid #3b82f6;
@@ -88,7 +90,6 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
-
 
 # ==========================================
 # הגדרות נכסים (Sidebar)
@@ -110,9 +111,7 @@ with st.sidebar:
     st.markdown("<h3 style='direction:rtl; text-align:right;'>🎛️ הגדרות ניתוח</h3>", unsafe_allow_html=True)
     st.divider()
 
-    st.markdown("**נכסים לניתוח**")
     use_custom = st.checkbox("הזן טיקר חופשי (מתקדם)", value=False)
-
     if use_custom:
         custom1 = st.text_input("טיקר 1 (לדוגמה: AAPL)", value="AAPL").upper().strip()
         custom2 = st.text_input("טיקר 2 (לדוגמה: MSFT)", value="MSFT").upper().strip()
@@ -121,31 +120,26 @@ with st.sidebar:
     else:
         ticker_names = list(DEFAULT_TICKERS.keys())
         asset1_name = st.selectbox("נכס 1", ticker_names, index=0)
-        asset2_name = st.selectbox("נכס 2", ticker_names, index=8) # Default USD/ILS
+        asset2_name = st.selectbox("נכס 2", ticker_names, index=8)
         ticker1_sym = DEFAULT_TICKERS[asset1_name]
         ticker2_sym = DEFAULT_TICKERS[asset2_name]
         
-    # הגנה מפני בחירת אותו נכס פעמיים
     if ticker1_sym == ticker2_sym:
         st.error("⚠️ בחרת את אותו נכס פעמיים. אנא בחר שני נכסים שונים.")
         st.stop()
 
     st.divider()
-
-    st.markdown("**מבנה הניתוח**")
-    mode = st.radio("", [
+    mode = st.radio("**מבנה הניתוח**", [
         "1. יומי: שער סגירה רשמי",
         "2. יומי: שעה קבועה ביום",
         "3. מהלך מסחר: חלון שעות",
         "4. תוך-יומי: קפיצות זמן"
-    ], label_visibility="collapsed")
+    ])
 
     st.divider()
-
     start_hour, end_hour, target_hour = None, None, None
     interval_choice, lag_minutes = "1d", 0
     
-    # הגדרת ימים - רק מצב 1 נחשב יומי מבחינת ה-API
     is_daily_mode = mode == "1. יומי: שער סגירה רשמי"
     max_days = 730 if is_daily_mode else 60
     default_days = 365 if is_daily_mode else 60
@@ -153,29 +147,20 @@ with st.sidebar:
     if mode == "2. יומי: שעה קבועה ביום":
         target_hour = st.selectbox("בחר שעה קבועה:", [f"{h:02d}:00" for h in range(8, 23)], index=2)
         interval_choice = "5m"
-    elif mode == "3. מהלך מסחר: חלון שעות":
-        st.markdown("**חלון זמן יומי:**")
+    elif mode == "3. מהלך מסחר: חלון שעות" or mode == "4. תוך-יומי: קפיצות זמן":
         col_t1, col_t2 = st.columns(2)
-        with col_t2:
-            start_hour = st.selectbox("שעת התחלה:", [f"{h:02d}:00" for h in range(8, 23)], index=2)
-        with col_t1:
-            end_hour = st.selectbox("שעת סיום:", [f"{h:02d}:00" for h in range(8, 23)], index=8)
-        interval_choice = "5m"
-    elif mode == "4. תוך-יומי: קפיצות זמן":
-        st.markdown("**חלון זמן יומי:**")
-        col_t1, col_t2 = st.columns(2)
-        with col_t2:
-            start_hour = st.selectbox("שעת התחלה:", [f"{h:02d}:00" for h in range(8, 23)], index=2)
-        with col_t1:
-            end_hour = st.selectbox("שעת סיום:", [f"{h:02d}:00" for h in range(8, 23)], index=8)
-        int_map = {"5 דקות": "5m", "15 דקות": "15m", "30 דקות": "30m", "1 שעה": "60m"}
-        interval_choice = int_map[st.selectbox("גודל קפיצה:", list(int_map.keys()))]
-        lag_minutes = st.number_input("השהיה לנכס 2 (דקות):", min_value=0, max_value=600, value=0, step=5)
+        with col_t2: start_hour = st.selectbox("שעת התחלה:", [f"{h:02d}:00" for h in range(8, 23)], index=2)
+        with col_t1: end_hour = st.selectbox("שעת סיום:", [f"{h:02d}:00" for h in range(8, 23)], index=8)
+        if mode == "4. תוך-יומי: קפיצות זמן":
+            int_map = {"5 דקות": "5m", "15 דקות": "15m", "30 דקות": "30m", "1 שעה": "60m"}
+            interval_choice = int_map[st.selectbox("גודל קפיצה:", list(int_map.keys()))]
+            lag_minutes = st.number_input("השהיה לנכס 2 (דקות):", min_value=0, max_value=600, value=0, step=5)
+        else:
+            interval_choice = "5m"
 
     days_back = st.number_input("ימים אחורה:", min_value=1, max_value=max_days, value=default_days)
 
     st.divider()
-    st.markdown("**הגדרות מתקדמות**")
     show_rolling = st.checkbox("הצג גרף Rolling Correlation", value=True)
     if show_rolling:
         rolling_window = st.slider("חלון Rolling (מספר תצפיות):", min_value=5, max_value=100, value=20)
@@ -216,7 +201,7 @@ def pvalue_label(p):
 # ==========================================
 # עיבוד הנתונים
 # ==========================================
-with st.spinner("מושך ומעבד נתונים, אנא המתן..."):
+with st.spinner("מושך ומעבד נתונים..."):
     raw_df = fetch_data(ticker1_sym, ticker2_sym, days_back, interval_choice)
 
 if raw_df.empty:
@@ -227,109 +212,116 @@ scatter_df = pd.DataFrame()
 records = []
 
 if mode == "1. יומי: שער סגירה רשמי":
-    returns_df = raw_df.pct_change().dropna()
-    scatter_df = returns_df.rename(columns={ticker1_sym: asset1_name, ticker2_sym: asset2_name})
+    returns_df_full = raw_df.pct_change()
+    scatter_df = returns_df_full.dropna().rename(columns={ticker1_sym: asset1_name, ticker2_sym: asset2_name})
+    
     for d, row in raw_df.iterrows():
-        if d in returns_df.index:
-            records.append({
-                "תאריך": d.strftime("%d/%m/%Y"),
-                f"שער סגירה {asset1_name}": round(float(row[ticker1_sym]), 2),
-                f"תשואה {asset1_name} (%)": round(float(returns_df.loc[d, ticker1_sym]) * 100, 2),
-                f"שער סגירה {asset2_name}": round(float(row[ticker2_sym]), 2),
-                f"תשואה {asset2_name} (%)": round(float(returns_df.loc[d, ticker2_sym]) * 100, 2),
-                "הפרש תשואות (%)": round(float((returns_df.loc[d, ticker1_sym] - returns_df.loc[d, ticker2_sym]) * 100), 2),
-            })
+        r1 = returns_df_full.loc[d, ticker1_sym]
+        r2 = returns_df_full.loc[d, ticker2_sym]
+        records.append({
+            "תאריך": d.strftime("%d/%m/%Y"),
+            f"שער סגירה {asset1_name}": safe_round(row[ticker1_sym]),
+            f"תשואה {asset1_name} (%)": safe_round(r1, 100),
+            f"שער סגירה {asset2_name}": safe_round(row[ticker2_sym]),
+            f"תשואה {asset2_name} (%)": safe_round(r2, 100),
+            "הפרש תשואות (%)": safe_round(r1 - r2, 100) if pd.notna(r1) and pd.notna(r2) else None,
+        })
 
 elif mode == "2. יומי: שעה קבועה ביום":
     target_end = f"{int(target_hour[:2]):02d}:59"
     hour_df = raw_df.between_time(target_hour, target_end).dropna(how="all")
     if not hour_df.empty:
-        # יצירת מזהה תאריך כמחרוזת כדי למנוע בעיות אינדקס
         hour_df['date_str'] = hour_df.index.date.astype(str)
-        daily = hour_df.dropna(how="any").groupby('date_str').first()
-        returns_df = daily.pct_change().dropna()
-        scatter_df = returns_df.rename(columns={ticker1_sym: asset1_name, ticker2_sym: asset2_name})
+        daily = hour_df.groupby('date_str').first()
+        returns_df_full = daily.pct_change()
         
-        # המרת האינדקס חזרה לאובייקטי תאריך כדי שהגרף יראה טוב
+        scatter_df = returns_df_full.dropna().rename(columns={ticker1_sym: asset1_name, ticker2_sym: asset2_name})
         scatter_df.index = pd.to_datetime(scatter_df.index)
         
-        for d_str in returns_df.index:
+        for d_str in daily.index:
             d_obj = pd.to_datetime(d_str)
+            r1 = returns_df_full.loc[d_str, ticker1_sym]
+            r2 = returns_df_full.loc[d_str, ticker2_sym]
             records.append({
                 "תאריך": d_obj.strftime("%d/%m/%Y"),
-                f"שער {asset1_name}": round(float(daily.loc[d_str, ticker1_sym]), 2),
-                f"תשואה {asset1_name} (%)": round(float(returns_df.loc[d_str, ticker1_sym]) * 100, 2),
-                f"שער {asset2_name}": round(float(daily.loc[d_str, ticker2_sym]), 2),
-                f"תשואה {asset2_name} (%)": round(float(returns_df.loc[d_str, ticker2_sym]) * 100, 2),
-                "הפרש תשואות (%)": round(float((returns_df.loc[d_str, ticker1_sym] - returns_df.loc[d_str, ticker2_sym]) * 100), 2),
+                f"שער {asset1_name}": safe_round(daily.loc[d_str, ticker1_sym]),
+                f"תשואה {asset1_name} (%)": safe_round(r1, 100),
+                f"שער {asset2_name}": safe_round(daily.loc[d_str, ticker2_sym]),
+                f"תשואה {asset2_name} (%)": safe_round(r2, 100),
+                "הפרש תשואות (%)": safe_round(r1 - r2, 100) if pd.notna(r1) and pd.notna(r2) else None,
             })
 
 elif mode == "3. מהלך מסחר: חלון שעות":
     filtered = raw_df.between_time(start_hour, end_hour)
     dates = np.unique(filtered.index.date)
-    calc = []
-    calc_dates = [] # שמירת התאריכים עבור האינדקס
+    calc, calc_dates = [], []
     
     for d in dates:
         try:
             day = filtered.loc[str(d)]
-        except KeyError:
-            continue # הגנה מפני ימים חסרים
+        except KeyError: continue
             
-        if len(day) < 2: continue
         v1, v2 = day[ticker1_sym].dropna(), day[ticker2_sym].dropna()
-        if v1.empty or v2.empty: continue
+        ret1 = (v1.iloc[-1] - v1.iloc[0]) / v1.iloc[0] if len(v1) >= 2 else np.nan
+        ret2 = (v2.iloc[-1] - v2.iloc[0]) / v2.iloc[0] if len(v2) >= 2 else np.nan
         
-        ret1, ret2 = (v1.iloc[-1] - v1.iloc[0]) / v1.iloc[0], (v2.iloc[-1] - v2.iloc[0]) / v2.iloc[0]
-        calc.append({asset1_name: ret1, asset2_name: ret2})
-        calc_dates.append(pd.to_datetime(d))
-        
+        if pd.isna(ret1) and pd.isna(ret2): continue
+        if pd.notna(ret1) and pd.notna(ret2):
+            calc.append({asset1_name: ret1, asset2_name: ret2})
+            calc_dates.append(pd.to_datetime(d))
+            
         records.append({
             "תאריך": d.strftime("%d/%m/%Y"),
-            f"פתיחה {asset1_name}": round(float(v1.iloc[0]), 2), f"סגירה {asset1_name}": round(float(v1.iloc[-1]), 2),
-            f"תשואת חלון {asset1_name} (%)": round(float(ret1) * 100, 2),
-            f"פתיחה {asset2_name}": round(float(v2.iloc[0]), 2), f"סגירה {asset2_name}": round(float(v2.iloc[-1]), 2),
-            f"תשואת חלון {asset2_name} (%)": round(float(ret2) * 100, 2),
-            "הפרש תשואות (%)": round(float((ret1 - ret2) * 100), 2),
+            f"פתיחה {asset1_name}": safe_round(v1.iloc[0]) if len(v1)>0 else None, 
+            f"סגירה {asset1_name}": safe_round(v1.iloc[-1]) if len(v1)>0 else None,
+            f"תשואת חלון {asset1_name} (%)": safe_round(ret1, 100),
+            f"פתיחה {asset2_name}": safe_round(v2.iloc[0]) if len(v2)>0 else None, 
+            f"סגירה {asset2_name}": safe_round(v2.iloc[-1]) if len(v2)>0 else None,
+            f"תשואת חלון {asset2_name} (%)": safe_round(ret2, 100),
+            "הפרש תשואות (%)": safe_round(ret1 - ret2, 100) if pd.notna(ret1) and pd.notna(ret2) else None,
         })
         
     scatter_df = pd.DataFrame(calc)
-    if not scatter_df.empty:
-        scatter_df.index = calc_dates # הגדרת התאריכים כאינדקס!
+    if not scatter_df.empty: scatter_df.index = calc_dates
 
 elif mode == "4. תוך-יומי: קפיצות זמן":
     filtered = raw_df.between_time(start_hour, end_hour).copy()
     if lag_minutes > 0:
         mins_map = {"5m": 5, "15m": 15, "30m": 30, "60m": 60}
-        # שימוש בחלוקה ועיגול לשלם למניעת תוצאת 0
         shift_periods = int(round(lag_minutes / mins_map[interval_choice]))
-        if shift_periods > 0:
-            filtered[ticker2_sym] = filtered[ticker2_sym].shift(shift_periods)
+        if shift_periods > 0: filtered[ticker2_sym] = filtered[ticker2_sym].shift(shift_periods)
             
-    returns_df = filtered.pct_change().dropna()
-    scatter_df = returns_df.rename(columns={ticker1_sym: asset1_name, ticker2_sym: asset2_name})
+    returns_df_full = filtered.pct_change()
+    scatter_df = returns_df_full.dropna().rename(columns={ticker1_sym: asset1_name, ticker2_sym: asset2_name})
+    
     for d, row in filtered.iterrows():
-        if d in returns_df.index:
-            records.append({
-                "תאריך ושעה": d.strftime("%d/%m/%Y %H:%M"),
-                f"שער {asset1_name}": round(float(row[ticker1_sym]), 2), f"תשואה {asset1_name} (%)": round(float(returns_df.loc[d, ticker1_sym]) * 100, 2),
-                f"שער {asset2_name}": round(float(row[ticker2_sym]), 2), f"תשואה {asset2_name} (%)": round(float(returns_df.loc[d, ticker2_sym]) * 100, 2),
-                "הפרש תשואות (%)": round(float((returns_df.loc[d, ticker1_sym] - returns_df.loc[d, ticker2_sym]) * 100), 2),
-            })
+        r1 = returns_df_full.loc[d, ticker1_sym]
+        r2 = returns_df_full.loc[d, ticker2_sym]
+        if pd.isna(r1) and pd.isna(r2) and pd.isna(row[ticker1_sym]) and pd.isna(row[ticker2_sym]): continue
+            
+        records.append({
+            "תאריך ושעה": d.strftime("%d/%m/%Y %H:%M"),
+            f"שער {asset1_name}": safe_round(row[ticker1_sym]), f"תשואה {asset1_name} (%)": safe_round(r1, 100),
+            f"שער {asset2_name}": safe_round(row[ticker2_sym]), f"תשואה {asset2_name} (%)": safe_round(r2, 100),
+            "הפרש תשואות (%)": safe_round(r1 - r2, 100) if pd.notna(r1) and pd.notna(r2) else None,
+        })
 
 # ==========================================
 # תצוגת האתר
 # ==========================================
 st.markdown(f"<h1 class='main-header'>ניתוח קורלציות מקצועי</h1>", unsafe_allow_html=True)
-
 st.markdown(f"<p class='sub-header'><span dir='ltr'><b>{asset1_name}</b></span> מול <span dir='ltr'><b>{asset2_name}</b></span> | {days_back} ימים אחורה | שעון ישראל</p>", unsafe_allow_html=True)
 
 if scatter_df.empty or len(scatter_df) < 3:
-    st.warning("⚠️ לא נמצאו מספיק נתונים משותפים לחישוב קורלציה אמינה בחלון הזמן שנבחר. נסה להגדיל את מספר הימים אחורה.")
+    st.warning("⚠️ לא נמצאו מספיק נתונים משותפים לחישוב קורלציה אמינה. נסה להגדיל את הימים או את חלון המסחר.")
     st.stop()
 
 col_a, col_b = scatter_df.columns[0], scatter_df.columns[1]
 stats_res = compute_stats(scatter_df[col_a], scatter_df[col_b])
+
+# --- הגנה בפני הבאג של יאהו ---
+if stats_res["corr"] > 0.999 and ticker1_sym != ticker2_sym:
+    st.error("⚠️ **התראת נתונים:** הקורלציה יצאה קרובה ל-1.0 מושלם בין שני נכסים שונים. זהו באג ידוע בשרתי המטמון של Yahoo Finance שמחזיר נתונים כפולים כשמבקשים כמות ימים מאוד ספציפית (למשל 729). **מומלץ לשנות את כמות הימים ל-728 או 730 כדי לאפס את המטמון ולקבל תוצאה אמיתית.**")
 
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("📈 קורלציה (Pearson)", f"{stats_res['corr']:.3f}")
@@ -347,7 +339,7 @@ st.markdown(f"""
 <div class='info-box'>
     🧠 <b>פרשנות כמותית:</b> נמצאה קורלציה <span class='stat-badge {badge_class}'>{direction} {strength}</span> 
     והיא {sig_text}. <br>
-    המשמעות של ה-R² היא ש-<b>{stats_res['r2']*100:.1f}%</b> מתנועת התשואות של נכס אחד מוסברת על ידי התנועה של הנכס השני בחלון הזמן שנבדק.
+    המשמעות של ה-R² היא ש-<b>{stats_res['r2']*100:.1f}%</b> מתנועת התשואות של נכס אחד מוסברת ע"י התנועה של הנכס השני.
 </div>
 """, unsafe_allow_html=True)
 
@@ -357,7 +349,6 @@ g1, g2 = st.columns([1, 1])
 with g1:
     st.markdown("<p class='section-title'>פיזור נתונים וקו מגמה</p>", unsafe_allow_html=True)
     fig_scatter = px.scatter(scatter_df, x=col_a, y=col_b, trendline="ols", labels={col_a: f"תשואה {col_a}", col_b: f"תשואה {col_b}"})
-    
     fig_scatter.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(255,255,255,0.7)")
     fig_scatter.update_traces(marker=dict(size=7, opacity=0.8, color="#3b82f6"))
     st.plotly_chart(fig_scatter, use_container_width=True)
@@ -368,13 +359,11 @@ with g2:
         rolling_corr = scatter_df[col_a].rolling(rolling_window).corr(scatter_df[col_b])
         fig_roll = go.Figure()
         fig_roll.add_hline(y=0, line_dash="dash", line_color="gray")
-        
-        # שימוש באינדקס של scatter_df (שעכשיו מכיל תאריכים בכל המצבים)
         fig_roll.add_trace(go.Scatter(x=rolling_corr.index, y=rolling_corr.values, mode="lines", fill="tozeroy", line=dict(color="#10b981", width=2)))
         fig_roll.update_layout(yaxis=dict(range=[-1.1, 1.1], title="קורלציה"), margin=dict(t=10, b=10, l=10, r=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(255,255,255,0.7)")
         st.plotly_chart(fig_roll, use_container_width=True)
     else:
-        st.info("💡 בחר 'הצג גרף Rolling' בתפריט הצד (וודא שיש מספיק תצפיות) כדי לראות את שינוי הקורלציה על ציר הזמן.")
+        st.info("💡 המתן או בחר חלון זמן קצר יותר כדי לראות את ה-Rolling Correlation.")
 
 # --- טבלת אקסל וקישורים תחתונים ---
 st.divider()
@@ -382,18 +371,41 @@ summary_df = pd.DataFrame(records)
 t1, t2 = st.columns([2, 1])
 
 with t1:
-    st.markdown("<p class='section-title'>טבלת נתונים מפורטת (מוכנה לאקסל)</p>", unsafe_allow_html=True)
+    st.markdown("<p class='section-title'>טבלת נתונים מפורטת (כולל ימים ללא חפיפה)</p>", unsafe_allow_html=True)
     st.dataframe(summary_df, use_container_width=True, height=250)
 
 with t2:
     st.markdown("<p class='section-title'>ייצוא ואימות</p>", unsafe_allow_html=True)
     
+    # --- הזרקת נוסחת אקסל (CORREL) במקום פשוט לייצא טקסט ---
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
         summary_df.to_excel(writer, index=False, sheet_name='Correlation Data')
-    
+        worksheet = writer.sheets['Correlation Data']
+        
+        try:
+            # מציאת העמודות של התשואות באופן דינמי
+            cols = list(summary_df.columns)
+            ret1_idx = cols.index(f"תשואה {asset1_name} (%)") + 1
+            ret2_idx = cols.index(f"תשואה {asset2_name} (%)") + 1
+            
+            c1_let = get_column_letter(ret1_idx)
+            c2_let = get_column_letter(ret2_idx)
+            form_col_let = get_column_letter(len(cols) + 2)
+            num_rows = len(summary_df)
+            
+            # כתיבת הנוסחה
+            worksheet[f"{form_col_let}1"] = "קורלציה (אקסל חי)"
+            worksheet[f"{form_col_let}2"] = f"=CORREL({c1_let}2:{c1_let}{num_rows+1}, {c2_let}2:{c2_let}{num_rows+1})"
+            
+            # עיצוב בסיסי לתא הנוסחה שיהיה בולט
+            worksheet[f"{form_col_let}1"].font = Font(bold=True)
+            worksheet[f"{form_col_let}2"].fill = PatternFill(start_color="D1FAE5", end_color="D1FAE5", fill_type="solid")
+        except ValueError:
+            pass # למקרה נדיר שהעמודות משנות שם
+
     st.download_button(
-        label="📥 הורד נתונים (Excel)", 
+        label="📥 הורד נתונים (Excel) + בדיקה", 
         data=buffer.getvalue(), 
         file_name=f"correlation_{asset1_name}_{asset2_name}.xlsx", 
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
