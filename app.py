@@ -7,20 +7,24 @@ import plotly.express as px
 st.set_page_config(page_title="ניתוח קורלציות", layout="wide")
 
 # ==========================================
-# מנגנון סיסמה
+# מנגנון סיסמה חכם (עם זיכרון URL)
 # ==========================================
-if 'authenticated' not in st.session_state:
+# בדיקה אם הסיסמה כבר נמצאת בכתובת האתר (למי ששמר במועדפים)
+if st.query_params.get("pwd") == "1234":
+    st.session_state.authenticated = True
+elif 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
 
 if not st.session_state.authenticated:
     st.markdown("<h1 style='text-align: center;'>ניתוח קורלציות</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; direction: rtl;'>הזן קוד גישה כדי לצפות במערכת:</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; direction: rtl;'>הזן קוד גישה (1234) ולחץ Enter. לאחר מכן, שמור את האתר במועדפים כדי לא להזין שוב:</p>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         pwd = st.text_input("סיסמה:", type="password", key="pwd_input", label_visibility="collapsed")
         if pwd == "1234":
             st.session_state.authenticated = True
+            st.query_params.pwd = "1234" # שותל את הסיסמה בכתובת כדי לדלג על זה בעתיד
             st.rerun()
         elif pwd != "":
             st.error("קוד שגוי")
@@ -64,16 +68,12 @@ days_back = st.sidebar.number_input("ימים אחורה (עד 60)", min_value=1
 st.sidebar.markdown("---")
 st.sidebar.markdown("<h4 style='text-align: right; direction: rtl;'>הגדרות מתקדמות</h4>", unsafe_allow_html=True)
 
-# בחירת סוג חישוב הקורלציה (קפיצות מול מהלך יומי שלם)
 calc_method = st.sidebar.radio(
     "רזולוציית חישוב קורלציה:",
     ["תשואה מרכזית בחלון (פעם ביום)", "קפיצות של 5 דקות (תוך-יומי)"]
 )
 
-# השהיה רלוונטית רק אם בודקים קפיצות של 5 דקות
-lag_minutes = 0
-if calc_method == "קפיצות של 5 דקות (תוך-יומי)":
-    lag_minutes = st.sidebar.number_input("השהיה לנכס 2 (בדקות)", min_value=0, max_value=600, value=0, step=5)
+lag_minutes = st.sidebar.number_input("השהיה לנכס 2 (בדקות)", min_value=0, max_value=600, value=0, step=5)
 
 @st.cache_data(ttl=600)
 def get_data(ticker1, ticker2, days):
@@ -97,6 +97,11 @@ with st.spinner('מנתח נתונים, זה עשוי לקחת מספר שניו
     raw_df = get_data(asset1, asset2, days_back)
     
     if not raw_df.empty:
+        # החלת ההשהיה על כל ציר הזמן של נכס 2 לפני החיתוך היומי
+        if lag_minutes > 0:
+            lag_steps = lag_minutes // 5
+            raw_df[asset2] = raw_df[asset2].shift(lag_steps)
+            
         filtered_df = raw_df.between_time(start_hour, end_hour)
         
         if filtered_df.empty:
@@ -136,7 +141,6 @@ with st.spinner('מנתח נתונים, זה עשוי לקחת מספר שניו
             
             summary_df = pd.DataFrame(records)
 
-            # חישוב הקורלציה לפי בחירת המשתמש
             if calc_method == "תשואה מרכזית בחלון (פעם ביום)":
                 if not summary_df.empty:
                     calc_df = pd.DataFrame({
@@ -152,10 +156,6 @@ with st.spinner('מנתח נתונים, זה עשוי לקחת מספר שניו
                     scatter_df = pd.DataFrame()
             else:
                 returns_df = filtered_df.pct_change().dropna()
-                if lag_minutes > 0:
-                    lag_steps = lag_minutes // 5
-                    returns_df[asset2] = returns_df[asset2].shift(lag_steps)
-                    returns_df = returns_df.dropna()
                 corr_value = returns_df[asset1].corr(returns_df[asset2])
                 num_obs = len(returns_df)
                 scatter_df = returns_df
@@ -176,7 +176,7 @@ with st.spinner('מנתח נתונים, זה עשוי לקחת מספר שניו
                     st.plotly_chart(fig_scatter, use_container_width=True)
                 
             with c2:
-                st.markdown("<h4 style='text-align: right; direction: rtl;'>תנועת מחירים מנורמלת (5 דק')</h4>", unsafe_allow_html=True)
+                st.markdown("<h4 style='text-align: right; direction: rtl;'>תנועת מחירים מנורמלת</h4>", unsafe_allow_html=True)
                 norm_df = (filtered_df.dropna() / filtered_df.dropna().iloc[0]) * 100
                 fig_line = px.line(norm_df)
                 st.plotly_chart(fig_line, use_container_width=True)
@@ -199,7 +199,6 @@ with st.spinner('מנתח נתונים, זה עשוי לקחת מספר שניו
     t1_sym = default_tickers[asset1]
     t2_sym = default_tickers[asset2]
     
-    # חישוב התאריכים לקישור (בפורמט Unix Timestamp שיאהו דורש)
     end_ts = int(pd.Timestamp.now().timestamp())
     start_ts = int((pd.Timestamp.now() - pd.Timedelta(days=days_back)).timestamp())
 
