@@ -43,18 +43,25 @@ def get_data(ticker1, ticker2, days):
     t1 = default_tickers[ticker1]
     t2 = default_tickers[ticker2]
     
-    # משיכת נתונים
+    # משיכת נתונים מיאהו
     df1 = yf.download(t1, period=f"{days}d", interval="5m")['Close']
     df2 = yf.download(t2, period=f"{days}d", interval="5m")['Close']
     
-    df1.name = ticker1
-    df2.name = ticker2
+    # הבטחה שהנתונים יתנהגו כעמודה בודדת ולא כטבלה מורכבת
+    if isinstance(df1, pd.DataFrame): 
+        df1 = df1.iloc[:, 0]
+    if isinstance(df2, pd.DataFrame): 
+        df2 = df2.iloc[:, 0]
     
-    full_df = pd.concat([df1, df2], axis=1)
+    # חיבור העמודות לטבלה אחת עם השמות הנכונים שבחרת
+    full_df = pd.DataFrame({ticker1: df1, ticker2: df2})
+    
+    # המרת אזור זמן לישראל
     try:
         full_df.index = full_df.index.tz_convert('Asia/Jerusalem')
     except:
         pass 
+        
     return full_df
 
 with st.spinner('מנתח נתונים, זה ייקח כמה שניות...'):
