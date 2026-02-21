@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+import io
 from scipy import stats
 
 st.set_page_config(page_title="ניתוח קורלציות מקצועי", layout="wide", page_icon="📊")
@@ -355,10 +356,20 @@ with t1:
     st.markdown("<p class='section-title'>טבלת נתונים מפורטת (מוכנה לאקסל)</p>", unsafe_allow_html=True)
     st.dataframe(summary_df, use_container_width=True, height=250)
 
-with t2:
-    st.markdown("<p class='section-title'>ייצוא ואימות</p>", unsafe_allow_html=True)
-    csv = summary_df.to_csv(index=False, encoding="utf-8-sig")
-    st.download_button(label="📥 הורד נתונים (CSV)", data=csv, file_name=f"correlation_{asset1_name}_{asset2_name}.csv", mime="text/csv", use_container_width=True)
+st.markdown("<p class='section-title'>ייצוא ואימות</p>", unsafe_allow_html=True)
+    
+    # ייצוא לאקסל (XLSX) במקום CSV לפתרון בעיות קידוד בעברית
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        summary_df.to_excel(writer, index=False, sheet_name='Correlation Data')
+    
+    st.download_button(
+        label="📥 הורד נתונים (Excel)", 
+        data=buffer.getvalue(), 
+        file_name=f"correlation_{asset1_name}_{asset2_name}.xlsx", 
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
+        use_container_width=True
+    )
     
     end_ts = int(pd.Timestamp.now().timestamp())
     start_ts = int((pd.Timestamp.now() - pd.Timedelta(days=days_back)).timestamp())
