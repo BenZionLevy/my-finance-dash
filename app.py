@@ -319,7 +319,6 @@ if scatter_df.empty or len(scatter_df) < 3:
 col_a, col_b = scatter_df.columns[0], scatter_df.columns[1]
 stats_res = compute_stats(scatter_df[col_a], scatter_df[col_b])
 
-# --- הגנה בפני הבאג של יאהו ---
 if stats_res["corr"] > 0.999 and ticker1_sym != ticker2_sym:
     st.error("⚠️ **התראת נתונים:** הקורלציה יצאה קרובה ל-1.0 מושלם בין שני נכסים שונים. זהו באג ידוע בשרתי המטמון של Yahoo Finance שמחזיר נתונים כפולים כשמבקשים כמות ימים מאוד ספציפית (למשל 729). **מומלץ לשנות את כמות הימים ל-728 או 730 כדי לאפס את המטמון ולקבל תוצאה אמיתית.**")
 
@@ -343,7 +342,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# --- גרפים ---
 g1, g2 = st.columns([1, 1])
 
 with g1:
@@ -365,7 +363,6 @@ with g2:
     else:
         st.info("💡 המתן או בחר חלון זמן קצר יותר כדי לראות את ה-Rolling Correlation.")
 
-# --- טבלת אקסל וקישורים תחתונים ---
 st.divider()
 summary_df = pd.DataFrame(records)
 t1, t2 = st.columns([2, 1])
@@ -377,14 +374,12 @@ with t1:
 with t2:
     st.markdown("<p class='section-title'>ייצוא ואימות</p>", unsafe_allow_html=True)
     
-    # --- הזרקת נוסחת אקסל (CORREL) במקום פשוט לייצא טקסט ---
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
         summary_df.to_excel(writer, index=False, sheet_name='Correlation Data')
         worksheet = writer.sheets['Correlation Data']
         
         try:
-            # מציאת העמודות של התשואות באופן דינמי
             cols = list(summary_df.columns)
             ret1_idx = cols.index(f"תשואה {asset1_name} (%)") + 1
             ret2_idx = cols.index(f"תשואה {asset2_name} (%)") + 1
@@ -394,18 +389,24 @@ with t2:
             form_col_let = get_column_letter(len(cols) + 2)
             num_rows = len(summary_df)
             
-            # כתיבת הנוסחה
+            # --- נוסחת קורלציה ---
             worksheet[f"{form_col_let}1"] = "קורלציה (אקסל חי)"
             worksheet[f"{form_col_let}2"] = f"=CORREL({c1_let}2:{c1_let}{num_rows+1}, {c2_let}2:{c2_let}{num_rows+1})"
             
-            # עיצוב בסיסי לתא הנוסחה שיהיה בולט
+            # --- נוסחת ספירת התצפיות שביקשת ---
+            worksheet[f"{form_col_let}4"] = "תצפיות משותפות בפועל"
+            worksheet[f"{form_col_let}5"] = f"=SUMPRODUCT(--ISNUMBER({c1_let}2:{c1_let}{num_rows+1}), --ISNUMBER({c2_let}2:{c2_let}{num_rows+1}))"
+            
+            # עיצוב בסיסי לתאים שיהיו בולטים
             worksheet[f"{form_col_let}1"].font = Font(bold=True)
+            worksheet[f"{form_col_let}4"].font = Font(bold=True)
             worksheet[f"{form_col_let}2"].fill = PatternFill(start_color="D1FAE5", end_color="D1FAE5", fill_type="solid")
+            worksheet[f"{form_col_let}5"].fill = PatternFill(start_color="DBEAFE", end_color="DBEAFE", fill_type="solid")
         except ValueError:
-            pass # למקרה נדיר שהעמודות משנות שם
+            pass
 
     st.download_button(
-        label="📥 הורד נתונים (Excel) + בדיקה", 
+        label="📥 הורד נתונים (Excel) + נוסחאות", 
         data=buffer.getvalue(), 
         file_name=f"correlation_{asset1_name}_{asset2_name}.xlsx", 
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
@@ -424,9 +425,6 @@ with t2:
     </div>
     """, unsafe_allow_html=True)
 
-# ==========================================
-# שורת תחתונה
-# ==========================================
 st.divider()
 st.markdown(
     """
