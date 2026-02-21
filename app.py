@@ -4,11 +4,10 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 
-# הגדרות תצוגה
 st.set_page_config(page_title="ניתוח קורלציות", layout="wide")
 
 # ==========================================
-# 1. מנגנון סיסמה קלילה (1234)
+# מנגנון סיסמה
 # ==========================================
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
@@ -25,10 +24,10 @@ if not st.session_state.authenticated:
             st.rerun()
         elif pwd != "":
             st.error("קוד שגוי")
-    st.stop() # עוצר את טעינת שאר האתר אם אין סיסמה
+    st.stop()
 
 # ==========================================
-# 2. האתר המרכזי (מוצג רק לאחר סיסמה)
+# האתר המרכזי 
 # ==========================================
 st.markdown("<h1 style='text-align: right;'>ניתוח קורלציות</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align: right; font-size: 13px; color: gray; direction: rtl;'>הערה: כל השעות המוצגות באתר נקבעו לפי שעון ישראל.</p>", unsafe_allow_html=True)
@@ -64,9 +63,18 @@ days_back = st.sidebar.number_input("ימים אחורה (עד 60)", min_value=1
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("<h4 style='text-align: right; direction: rtl;'>הגדרות מתקדמות</h4>", unsafe_allow_html=True)
-lag_minutes = st.sidebar.number_input("השהיה לנכס 2 (בדקות)", min_value=0, max_value=600, value=0, step=5)
 
-# --- פונקציית משיכת נתונים ---
+# בחירת סוג חישוב הקורלציה (קפיצות מול מהלך יומי שלם)
+calc_method = st.sidebar.radio(
+    "רזולוציית חישוב קורלציה:",
+    ["תשואה מרכזית בחלון (פעם ביום)", "קפיצות של 5 דקות (תוך-יומי)"]
+)
+
+# השהיה רלוונטית רק אם בודקים קפיצות של 5 דקות
+lag_minutes = 0
+if calc_method == "קפיצות של 5 דקות (תוך-יומי)":
+    lag_minutes = st.sidebar.number_input("השהיה לנכס 2 (בדקות)", min_value=0, max_value=600, value=0, step=5)
+
 @st.cache_data(ttl=600)
 def get_data(ticker1, ticker2, days):
     t1 = default_tickers[ticker1]
@@ -79,12 +87,10 @@ def get_data(ticker1, ticker2, days):
     if isinstance(df2, pd.DataFrame): df2 = df2.iloc[:, 0]
     
     full_df = pd.DataFrame({ticker1: df1, ticker2: df2})
-    
     try:
         full_df.index = full_df.index.tz_convert('Asia/Jerusalem')
     except:
         pass 
-        
     return full_df
 
 with st.spinner('מנתח נתונים, זה עשוי לקחת מספר שניות...'):
@@ -96,7 +102,6 @@ with st.spinner('מנתח נתונים, זה עשוי לקחת מספר שניו
         if filtered_df.empty:
             st.error("לא נמצאו נתונים בחלון הזמן שנבחר.")
         else:
-            # --- חישובים ובניית הטבלה ---
             records = []
             dates = np.unique(filtered_df.index.date)
             for d in dates:
@@ -131,32 +136,47 @@ with st.spinner('מנתח נתונים, זה עשוי לקחת מספר שניו
             
             summary_df = pd.DataFrame(records)
 
-            returns_df = filtered_df.pct_change().dropna()
-            
-            if lag_minutes > 0:
-                lag_steps = lag_minutes // 5
-                returns_df[asset2] = returns_df[asset2].shift(lag_steps)
-                returns_df = returns_df.dropna()
-                
-            corr_value = returns_df[asset1].corr(returns_df[asset2])
-            num_obs = len(returns_df)
-            
-            # --- תצוגה ---
+            # חישוב הקורלציה לפי בחירת המשתמש
+            if calc_method == "תשואה מרכזית בחלון (פעם ביום)":
+                if not summary_df.empty:
+                    calc_df = pd.DataFrame({
+                        asset1: summary_df[f"תשואה {asset1} (%)"],
+                        asset2: summary_df[f"תשואה {asset2} (%)"]
+                    })
+                    corr_value = calc_df[asset1].corr(calc_df[asset2])
+                    num_obs = len(calc_df)
+                    scatter_df = calc_df
+                else:
+                    corr_value = 0
+                    num_obs = 0
+                    scatter_df = pd.DataFrame()
+            else:
+                returns_df = filtered_df.pct_change().dropna()
+                if lag_minutes > 0:
+                    lag_steps = lag_minutes // 5
+                    returns_df[asset2] = returns_df[asset2].shift(lag_steps)
+                    returns_df = returns_df.dropna()
+                corr_value = returns_df[asset1].corr(returns_df[asset2])
+                num_obs = len(returns_df)
+                scatter_df = returns_df
+
+            # --- תצוגה עליונה ---
             col1, col2, col3 = st.columns(3)
-            col1.metric(label="קורלציה סופית", value=f"{corr_value:.2f}")
-            col2.metric(label="מספר תצפיות (בדיקות)", value=num_obs)
-            col3.metric(label="השהיה שהופעלה", value=f"{lag_minutes} דקות")
+            col1.metric(label=f"קורלציה סופית ({calc_method})", value=f"{corr_value:.2f}")
+            col2.metric(label="מספר תצפיות בחישוב", value=num_obs)
+            col3.metric(label="השהיה שהופעלה", value=f"{lag_minutes} דקות" if lag_minutes > 0 else "ללא")
             
             st.divider()
             
             c1, c2 = st.columns([1, 1])
             with c1:
                 st.markdown("<h4 style='text-align: right; direction: rtl;'>פיזור נתונים</h4>", unsafe_allow_html=True)
-                fig_scatter = px.scatter(returns_df, x=asset1, y=asset2)
-                st.plotly_chart(fig_scatter, use_container_width=True)
+                if not scatter_df.empty:
+                    fig_scatter = px.scatter(scatter_df, x=asset1, y=asset2)
+                    st.plotly_chart(fig_scatter, use_container_width=True)
                 
             with c2:
-                st.markdown("<h4 style='text-align: right; direction: rtl;'>תנועת מחירים מנורמלת</h4>", unsafe_allow_html=True)
+                st.markdown("<h4 style='text-align: right; direction: rtl;'>תנועת מחירים מנורמלת (5 דק')</h4>", unsafe_allow_html=True)
                 norm_df = (filtered_df.dropna() / filtered_df.dropna().iloc[0]) * 100
                 fig_line = px.line(norm_df)
                 st.plotly_chart(fig_line, use_container_width=True)
@@ -174,15 +194,25 @@ with st.spinner('מנתח נתונים, זה עשוי לקחת מספר שניו
                 mime="text/csv",
             )
 
-    # --- 3. אזור קישורים שימושיים בתחתית הדף ---
+    # --- יצירת קישורים דינמיים ---
     st.divider()
-    st.markdown("<h4 style='text-align: right; direction: rtl;'>🔗 קישורים שימושיים לבדיקת נתונים:</h4>", unsafe_allow_html=True)
-    st.markdown("""
+    t1_sym = default_tickers[asset1]
+    t2_sym = default_tickers[asset2]
+    
+    # חישוב התאריכים לקישור (בפורמט Unix Timestamp שיאהו דורש)
+    end_ts = int(pd.Timestamp.now().timestamp())
+    start_ts = int((pd.Timestamp.now() - pd.Timedelta(days=days_back)).timestamp())
+
+    link_t1 = f"https://finance.yahoo.com/chart/{t1_sym}?period1={start_ts}&period2={end_ts}&interval=5m"
+    link_t2 = f"https://finance.yahoo.com/chart/{t2_sym}?period1={start_ts}&period2={end_ts}&interval=5m"
+
+    st.markdown("<h4 style='text-align: right; direction: rtl;'>🔗 קישורים דינמיים לאימות הנתונים שנבחרו:</h4>", unsafe_allow_html=True)
+    st.markdown(f"""
     <div dir='rtl' style='text-align: right;'>
+    לחץ על הקישורים הבאים כדי לראות את הגרפים המדויקים ביאהו פיננס לחלון הזמן של {days_back} הימים האחרונים:<br><br>
     <ul>
-        <li><a href='https://finance.yahoo.com/' target='_blank'>Yahoo Finance (נוח לבדיקת שער הדולר וחוזים עתידיים)</a></li>
-        <li><a href='https://il.investing.com/' target='_blank'>Investing.com ישראל (מצוין לבדיקת מניות ומדדים מקומיים)</a></li>
-        <li><a href='https://www.bizportal.co.il/' target='_blank'>Bizportal (לנתוני זמן אמת של בורסת תל אביב)</a></li>
+        <li><a href='{link_t1}' target='_blank'>גרף 5 דקות עבור: <b>{asset1}</b></a></li>
+        <li><a href='{link_t2}' target='_blank'>גרף 5 דקות עבור: <b>{asset2}</b></a></li>
     </ul>
     </div>
     """, unsafe_allow_html=True)
