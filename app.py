@@ -76,32 +76,6 @@ st.markdown("""
         margin-bottom: 2rem;
         box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
-    
-    /* עיצוב כפתור הוואטסאפ הצף */
-    .whatsapp-float {
-        position: fixed;
-        bottom: 30px;
-        left: 30px;
-        background-color: #25D366;
-        color: white !important;
-        border-radius: 50px;
-        padding: 12px 24px;
-        font-size: 1rem;
-        font-weight: 600;
-        text-decoration: none;
-        box-shadow: 0 4px 10px rgba(37, 211, 102, 0.4);
-        z-index: 1000;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        direction: rtl;
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }
-    
-    .whatsapp-float:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 6px 14px rgba(37, 211, 102, 0.5);
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -385,10 +359,7 @@ with t2:
     """, unsafe_allow_html=True)
 
 # ==========================================
-# כפתור וואטסאפ צף
+# שורת תחתונה
 # ==========================================
-st.markdown("""
-<a href="https://wa.me/972548810248" class="whatsapp-float" target="_blank">
-    💬 לפניות בווצאפ: 054-8810248
-</a>
-""", unsafe_allow_html=True)
+st.divider()
+st.markdown("<p style='text-align: center; color: #64748b; font-size: 1rem; direction: rtl;'>האתר לצורכי מחקר, ועל אחריות המשתמש, לשיתופי פעולה ניתן לפנות 054-8810248.</p>", unsafe_allow_html=True)
