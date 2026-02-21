@@ -26,17 +26,29 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;600;700&display=swap');
     
+    /* תמונת רקע חדשה - אבסטרקט גיאומטרי נקי ופיננסי */
     .stApp {
-        background: linear-gradient(rgba(248, 250, 252, 0.92), rgba(248, 250, 252, 0.97)), 
-                    url('https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=2070&auto=format&fit=crop');
+        background: linear-gradient(rgba(248, 250, 252, 0.88), rgba(248, 250, 252, 0.95)), 
+                    url('https://images.unsplash.com/photo-1604147495798-57beb5d6af73?q=80&w=2070&auto=format&fit=crop');
         background-size: cover;
         background-attachment: fixed;
         background-position: center;
     }
+    
     html, body, [class*="css"] {
         font-family: 'Heebo', sans-serif;
         direction: rtl;
     }
+
+    /* === התיקון לחצים של תפריט הצד === */
+    /* עושה אפקט מראה לחצים כדי שיתאימו לממשק עברי */
+    [data-testid="collapsedControl"] svg,
+    [data-testid="baseButton-header"] svg,
+    [data-testid="baseButton-headerNoPadding"] svg,
+    button[kind="header"] svg {
+        transform: scaleX(-1) !important;
+    }
+    
     .main-header {
         text-align: center;
         padding: 1.5rem 0 0.5rem 0;
@@ -47,12 +59,14 @@ st.markdown("""
         -webkit-text-fill-color: transparent;
         background-clip: text;
     }
+
     .sub-header {
         text-align: center;
         color: #475569;
         font-size: 1.1rem;
         margin-bottom: 2rem;
     }
+
     .stat-badge {
         display: inline-block;
         padding: 0.3rem 0.8rem;
@@ -62,10 +76,12 @@ st.markdown("""
         margin: 0.15rem;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
+    
     .badge-green { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
     .badge-red   { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
     .badge-blue  { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
     .badge-gray  { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }
+
     .section-title {
         font-size: 1.25rem;
         font-weight: 600;
@@ -76,6 +92,7 @@ st.markdown("""
         border-bottom: 2px solid #cbd5e1;
         padding-bottom: 8px;
     }
+
     .info-box {
         background: rgba(255, 255, 255, 0.95);
         border-right: 4px solid #3b82f6;
