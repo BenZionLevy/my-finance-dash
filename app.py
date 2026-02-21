@@ -23,7 +23,7 @@ st.markdown("""
     .main-header {
         text-align: center;
         padding: 1.5rem 0 0.5rem 0;
-        font-size: 2.2rem;
+        font-size: 2.5rem;
         font-weight: 700;
         background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
         -webkit-background-clip: text;
@@ -33,71 +33,77 @@ st.markdown("""
 
     .sub-header {
         text-align: center;
-        color: #888;
-        font-size: 0.95rem;
-        margin-bottom: 1.5rem;
+        color: #64748b;
+        font-size: 1.1rem;
+        margin-bottom: 2rem;
     }
 
     .stat-badge {
         display: inline-block;
-        padding: 0.25rem 0.7rem;
+        padding: 0.3rem 0.8rem;
         border-radius: 20px;
-        font-size: 0.85rem;
+        font-size: 0.9rem;
         font-weight: 600;
         margin: 0.15rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
     
-    .badge-green { background: #d1fae5; color: #065f46; }
-    .badge-red   { background: #fee2e2; color: #991b1b; }
-    .badge-blue  { background: #dbeafe; color: #1e40af; }
-    .badge-gray  { background: #f3f4f6; color: #374151; }
+    .badge-green { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+    .badge-red   { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .badge-blue  { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+    .badge-gray  { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }
 
     .section-title {
-        font-size: 1.15rem;
+        font-size: 1.25rem;
         font-weight: 600;
         color: #1e293b;
-        margin-bottom: 0.5rem;
+        margin-bottom: 1rem;
         text-align: right;
         direction: rtl;
         border-bottom: 2px solid #e2e8f0;
-        padding-bottom: 5px;
+        padding-bottom: 8px;
     }
 
     .info-box {
-        background: #eff6ff;
-        border: 1px solid #93c5fd;
+        background: #f8fafc;
+        border-right: 4px solid #3b82f6;
         border-radius: 8px;
-        padding: 1rem;
-        color: #1e40af;
+        padding: 1.2rem;
+        color: #334155;
         direction: rtl;
+        font-size: 1.05rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    /* עיצוב כפתור הוואטסאפ הצף */
+    .whatsapp-float {
+        position: fixed;
+        bottom: 30px;
+        left: 30px;
+        background-color: #25D366;
+        color: white !important;
+        border-radius: 50px;
+        padding: 12px 24px;
         font-size: 1rem;
-        margin-bottom: 1.5rem;
+        font-weight: 600;
+        text-decoration: none;
+        box-shadow: 0 4px 10px rgba(37, 211, 102, 0.4);
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        direction: rtl;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    
+    .whatsapp-float:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 14px rgba(37, 211, 102, 0.5);
     }
 </style>
 """, unsafe_allow_html=True)
 
-# ==========================================
-# מנגנון סיסמה חכם ועמיד (ללא st.secrets שמסבך)
-# ==========================================
-if st.query_params.get("pwd") == "1234":
-    st.session_state.authenticated = True
-elif 'authenticated' not in st.session_state:
-    st.session_state.authenticated = False
-
-if not st.session_state.authenticated:
-    st.markdown("<h1 class='main-header'>📊 מערכת מחקר כמותית</h1>", unsafe_allow_html=True)
-    st.markdown("<p class='sub-header'>הזן קוד גישה (1234) ולחץ Enter. לאחר מכן, שמור במועדפים לכניסה חלקה.</p>", unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        pwd = st.text_input("סיסמה:", type="password", key="pwd_input", label_visibility="collapsed")
-        if pwd == "1234":
-            st.session_state.authenticated = True
-            st.query_params.pwd = "1234"
-            st.rerun()
-        elif pwd != "":
-            st.error("❌ קוד שגוי")
-    st.stop()
 
 # ==========================================
 # הגדרות נכסים (Sidebar)
@@ -288,7 +294,9 @@ elif mode == "4. תוך-יומי: קפיצות זמן":
 # תצוגת האתר
 # ==========================================
 st.markdown(f"<h1 class='main-header'>ניתוח קורלציות מקצועי</h1>", unsafe_allow_html=True)
-st.markdown(f"<p class='sub-header'><b>{asset1_name}</b> מול <b>{asset2_name}</b> | {days_back} ימים אחורה | שעון ישראל</p>", unsafe_allow_html=True)
+
+# שימוש ב-span עם dir='ltr' כדי לפתור את בעיית הכיווניות בין עברית לאנגלית
+st.markdown(f"<p class='sub-header'><span dir='ltr'><b>{asset1_name}</b></span> מול <span dir='ltr'><b>{asset2_name}</b></span> | {days_back} ימים אחורה | שעון ישראל</p>", unsafe_allow_html=True)
 
 if scatter_df.empty or len(scatter_df) < 3:
     st.warning("⚠️ לא נמצאו מספיק נתונים משותפים לחישוב קורלציה אמינה בחלון הזמן שנבחר.")
@@ -323,7 +331,7 @@ g1, g2 = st.columns([1, 1])
 with g1:
     st.markdown("<p class='section-title'>פיזור נתונים וקו מגמה</p>", unsafe_allow_html=True)
     fig_scatter = px.scatter(scatter_df, x=col_a, y=col_b, trendline="ols", labels={col_a: f"תשואה {col_a}", col_b: f"תשואה {col_b}"})
-    fig_scatter.update_traces(marker=dict(size=7, opacity=0.7, color="#1f77b4"))
+    fig_scatter.update_traces(marker=dict(size=7, opacity=0.7, color="#3b82f6"))
     st.plotly_chart(fig_scatter, use_container_width=True)
 
 with g2:
@@ -332,7 +340,7 @@ with g2:
         rolling_corr = scatter_df[col_a].rolling(rolling_window).corr(scatter_df[col_b])
         fig_roll = go.Figure()
         fig_roll.add_hline(y=0, line_dash="dash", line_color="gray")
-        fig_roll.add_trace(go.Scatter(y=rolling_corr.values, mode="lines", fill="tozeroy", line=dict(color="#2ca02c", width=2)))
+        fig_roll.add_trace(go.Scatter(y=rolling_corr.values, mode="lines", fill="tozeroy", line=dict(color="#10b981", width=2)))
         fig_roll.update_layout(yaxis=dict(range=[-1.1, 1.1], title="קורלציה"), margin=dict(t=10, b=10, l=10, r=10))
         st.plotly_chart(fig_roll, use_container_width=True)
     else:
@@ -357,5 +365,18 @@ with t2:
     l1 = f"https://finance.yahoo.com/chart/{ticker1_sym}?period1={start_ts}&period2={end_ts}&interval={interval_choice}"
     l2 = f"https://finance.yahoo.com/chart/{ticker2_sym}?period1={start_ts}&period2={end_ts}&interval={interval_choice}"
     
-    st.markdown(f"<br><div dir='rtl'>🔗 <a href='{l1}' target='_blank'>אימות גרף ב-Yahoo: <b>{asset1_name}</b></a><br><br>"
-                f"🔗 <a href='{l2}' target='_blank'>אימות גרף ב-Yahoo: <b>{asset2_name}</b></a></div>", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div dir='rtl' style='margin-top: 15px;'>
+        <a href='{l1}' target='_blank' style='text-decoration:none; color:#1e40af;'>🔗 אימות גרף ב-Yahoo: <span dir='ltr'><b>{asset1_name}</b></span></a><br><br>
+        <a href='{l2}' target='_blank' style='text-decoration:none; color:#1e40af;'>🔗 אימות גרף ב-Yahoo: <span dir='ltr'><b>{asset2_name}</b></span></a>
+    </div>
+    """, unsafe_allow_html=True)
+
+# ==========================================
+# כפתור וואטסאפ צף
+# ==========================================
+st.markdown("""
+<a href="https://wa.me/972548810248" class="whatsapp-float" target="_blank">
+    💬 לפניות בווצאפ: 054-8810248
+</a>
+""", unsafe_allow_html=True)
