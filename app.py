@@ -15,36 +15,32 @@ st.set_page_config(page_title="ניתוח קורלציות מקצועי", layout
 # פונקציות עזר קטנות
 # ==========================================
 def safe_round(val, mult=1.0):
-    """פונקציה שמחזירה תא ריק (None) לאקסל במקום שגיאה במקרה של נתון חסר"""
     if pd.isna(val): return None
     return round(float(val) * mult, 2)
 
 # ==========================================
-# עיצוב CSS מותאם אישית
+# עיצוב CSS מותאם אישית (עיצוב Rubik ונקי)
 # ==========================================
 st.markdown("""
 <style>
-    /* ייבוא הגופן החדש - Rubik */
     @import url('https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700&display=swap');
     
-    /* רקע מודרני, חלק ונקי ללא תמונה */
     .stApp {
         background: linear-gradient(135deg, #fcfcfd 0%, #e2e8f0 100%);
     }
-    
     html, body, [class*="css"] {
         font-family: 'Rubik', sans-serif;
         direction: rtl;
     }
-
-    /* תיקון החצים של תפריט הצד כך שיתאימו לעברית */
+    
+    /* היפוך חצים בתפריט צד */
     [data-testid="collapsedControl"] svg,
     [data-testid="baseButton-header"] svg,
     [data-testid="baseButton-headerNoPadding"] svg,
     button[kind="header"] svg {
         transform: scaleX(-1) !important;
     }
-    
+
     .main-header {
         text-align: center;
         padding: 1.5rem 0 0.5rem 0;
@@ -55,14 +51,12 @@ st.markdown("""
         -webkit-text-fill-color: transparent;
         background-clip: text;
     }
-
     .sub-header {
         text-align: center;
         color: #475569;
         font-size: 1.1rem;
         margin-bottom: 2rem;
     }
-
     .stat-badge {
         display: inline-block;
         padding: 0.3rem 0.8rem;
@@ -72,12 +66,11 @@ st.markdown("""
         margin: 0.15rem;
         box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     }
-    
     .badge-green { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
     .badge-red   { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
     .badge-blue  { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
     .badge-gray  { background: #f3f4f6; color: #374151; border: 1px solid #e5e7eb; }
-
+    
     .section-title {
         font-size: 1.25rem;
         font-weight: 600;
@@ -88,7 +81,6 @@ st.markdown("""
         border-bottom: 2px solid #cbd5e1;
         padding-bottom: 8px;
     }
-
     .info-box {
         background: rgba(255, 255, 255, 0.95);
         border-right: 4px solid #3b82f6;
@@ -108,16 +100,9 @@ st.markdown("""
 # הגדרות נכסים (Sidebar)
 # ==========================================
 DEFAULT_TICKERS = {
-    "לאומי": "LUMI.TA",
-    "פועלים": "POLI.TA",
-    "דיסקונט": "DSCT.TA",
-    "מדד ת\"א 35": "TA35.TA",
-    "מדד ת\"א 125": "TA125.TA",
-    "מדד בנקים 5": "TA-BANKS.TA",
-    "S&P 500 Futures": "ES=F",
-    'נאסד"ק 100': "NQ=F",
-    "USD/ILS": "ILS=X",
-    "XLF (פיננסים ארה\"ב)": "XLF"
+    "לאומי": "LUMI.TA", "פועלים": "POLI.TA", "דיסקונט": "DSCT.TA",
+    "מדד ת\"א 35": "TA35.TA", "מדד ת\"א 125": "TA125.TA", "מדד בנקים 5": "TA-BANKS.TA",
+    "S&P 500 Futures": "ES=F", 'נאסד"ק 100': "NQ=F", "USD/ILS": "ILS=X", "XLF (פיננסים ארה\"ב)": "XLF"
 }
 
 with st.sidebar:
@@ -143,12 +128,15 @@ with st.sidebar:
 
     st.divider()
     mode = st.radio("**מבנה הניתוח**", [
-        "1. יומי: שער סגירה רשמי",
-        "2. יומי: שעה קבועה ביום",
-        "3. מהלך מסחר: חלון שעות",
-        "4. תוך-יומי: קפיצות זמן"
+        "1. יומי: שער סגירה רשמי", "2. יומי: שעה קבועה ביום",
+        "3. מהלך מסחר: חלון שעות", "4. תוך-יומי: קפיצות זמן"
     ])
 
+    st.divider()
+    # תוספת מס' 1: סוג התשואה
+    return_type = st.radio("**סוג תשואה:**", ["אחוז שינוי רגיל (Simple)", "תשואה לוגריתמית (Log)"])
+    use_log_returns = "לוגריתמית" in return_type
+    
     st.divider()
     start_hour, end_hour, target_hour = None, None, None
     interval_choice, lag_minutes = "1d", 0
@@ -167,7 +155,7 @@ with st.sidebar:
         if mode == "4. תוך-יומי: קפיצות זמן":
             int_map = {"5 דקות": "5m", "15 דקות": "15m", "30 דקות": "30m", "1 שעה": "60m"}
             interval_choice = int_map[st.selectbox("גודל קפיצה:", list(int_map.keys()))]
-            lag_minutes = st.number_input("השהיה לנכס 2 (דקות):", min_value=0, max_value=600, value=0, step=5)
+            lag_minutes = st.number_input("השהיה קבועה לנכס 2 (דקות):", min_value=0, max_value=600, value=0, step=5)
         else:
             interval_choice = "5m"
 
@@ -177,6 +165,12 @@ with st.sidebar:
     show_rolling = st.checkbox("הצג גרף Rolling Correlation", value=True)
     if show_rolling:
         rolling_window = st.slider("חלון Rolling (מספר תצפיות):", min_value=5, max_value=100, value=20)
+        
+    st.divider()
+    # תוספת מס' 2: הפעלת מפת CCF
+    show_ccf = st.checkbox("🔍 הצג מפת הובלה (Cross-Correlation)", value=False)
+    if show_ccf:
+        ccf_max_lag = st.slider("מספר השהיות (Lags) לבדיקה:", min_value=1, max_value=20, value=10)
 
 # ==========================================
 # פונקציות חישוב ומשיכה
@@ -211,6 +205,11 @@ def pvalue_label(p):
     if p < 0.05:  return f"p = {p:.3f} ⚠️"
     return f"p = {p:.3f} ❌ לא מובהק"
 
+def calculate_returns(df, is_log):
+    if is_log:
+        return np.log(df / df.shift(1))
+    return df.pct_change()
+
 # ==========================================
 # עיבוד הנתונים
 # ==========================================
@@ -225,7 +224,7 @@ scatter_df = pd.DataFrame()
 records = []
 
 if mode == "1. יומי: שער סגירה רשמי":
-    returns_df_full = raw_df.pct_change()
+    returns_df_full = calculate_returns(raw_df, use_log_returns)
     scatter_df = returns_df_full.dropna().rename(columns={ticker1_sym: asset1_name, ticker2_sym: asset2_name})
     
     for d, row in raw_df.iterrows():
@@ -246,7 +245,7 @@ elif mode == "2. יומי: שעה קבועה ביום":
     if not hour_df.empty:
         hour_df['date_str'] = hour_df.index.date.astype(str)
         daily = hour_df.groupby('date_str').first()
-        returns_df_full = daily.pct_change()
+        returns_df_full = calculate_returns(daily, use_log_returns)
         
         scatter_df = returns_df_full.dropna().rename(columns={ticker1_sym: asset1_name, ticker2_sym: asset2_name})
         scatter_df.index = pd.to_datetime(scatter_df.index)
@@ -275,10 +274,16 @@ elif mode == "3. מהלך מסחר: חלון שעות":
         except KeyError: continue
             
         v1, v2 = day[ticker1_sym].dropna(), day[ticker2_sym].dropna()
-        ret1 = (v1.iloc[-1] - v1.iloc[0]) / v1.iloc[0] if len(v1) >= 2 else np.nan
-        ret2 = (v2.iloc[-1] - v2.iloc[0]) / v2.iloc[0] if len(v2) >= 2 else np.nan
-        
-        if pd.isna(ret1) and pd.isna(ret2): continue
+        if len(v1) >= 2 and len(v2) >= 2:
+            if use_log_returns:
+                ret1 = np.log(v1.iloc[-1] / v1.iloc[0]) if v1.iloc[0] > 0 else np.nan
+                ret2 = np.log(v2.iloc[-1] / v2.iloc[0]) if v2.iloc[0] > 0 else np.nan
+            else:
+                ret1 = (v1.iloc[-1] - v1.iloc[0]) / v1.iloc[0]
+                ret2 = (v2.iloc[-1] - v2.iloc[0]) / v2.iloc[0]
+        else:
+            ret1, ret2 = np.nan, np.nan
+            
         if pd.notna(ret1) and pd.notna(ret2):
             calc.append({asset1_name: ret1, asset2_name: ret2})
             calc_dates.append(pd.to_datetime(d))
@@ -304,7 +309,7 @@ elif mode == "4. תוך-יומי: קפיצות זמן":
         shift_periods = int(round(lag_minutes / mins_map[interval_choice]))
         if shift_periods > 0: filtered[ticker2_sym] = filtered[ticker2_sym].shift(shift_periods)
             
-    returns_df_full = filtered.pct_change()
+    returns_df_full = calculate_returns(filtered, use_log_returns)
     scatter_df = returns_df_full.dropna().rename(columns={ticker1_sym: asset1_name, ticker2_sym: asset2_name})
     
     for d, row in filtered.iterrows():
@@ -333,7 +338,7 @@ col_a, col_b = scatter_df.columns[0], scatter_df.columns[1]
 stats_res = compute_stats(scatter_df[col_a], scatter_df[col_b])
 
 if stats_res["corr"] > 0.999 and ticker1_sym != ticker2_sym:
-    st.error("⚠️ **התראת נתונים:** הקורלציה יצאה קרובה ל-1.0 מושלם בין שני נכסים שונים. זהו באג ידוע בשרתי המטמון של Yahoo Finance שמחזיר נתונים כפולים כשמבקשים כמות ימים מאוד ספציפית (למשל 729). **מומלץ לשנות את כמות הימים ל-728 או 730 כדי לאפס את המטמון ולקבל תוצאה אמיתית.**")
+    st.error("⚠️ **התראת נתונים:** הקורלציה יצאה קרובה ל-1.0. זהו באג של Yahoo Finance המחזיר נתונים כפולים (לרוב עקב ימי בקשה ספציפיים). שחק עם כמות הימים (למשל 728 או 730) לתיקון.")
 
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("📈 קורלציה (Pearson)", f"{stats_res['corr']:.3f}")
@@ -351,12 +356,48 @@ st.markdown(f"""
 <div class='info-box'>
     🧠 <b>פרשנות כמותית:</b> נמצאה קורלציה <span class='stat-badge {badge_class}'>{direction} {strength}</span> 
     והיא {sig_text}. <br>
-    המשמעות של ה-R² היא ש-<b>{stats_res['r2']*100:.1f}%</b> מתנועת התשואות של נכס אחד מוסברת ע"י התנועה של הנכס השני.
+    המשמעות של ה-R² היא ש-<b>{stats_res['r2']*100:.1f}%</b> מתנועת התשואות (מבוסס {return_type.split()[0]}) של נכס אחד מוסברת ע"י התנועה של הנכס השני.
 </div>
 """, unsafe_allow_html=True)
 
-g1, g2 = st.columns([1, 1])
+# --- גרף CCF ---
+if show_ccf and len(scatter_df) > ccf_max_lag * 2:
+    st.markdown("<p class='section-title'>מפת הובלה אוטומטית (Cross-Correlation)</p>", unsafe_allow_html=True)
+    st.info("💡 **איך לקרוא את הגרף?** הגרף בודק מי מגיב למי. אם העמודה הכי גבוהה נמצאת בצד הימני (השהיה חיובית), זה אומר ש**נכס 1 מוביל**. אם היא בשמאלי (שלילית), אז **נכס 2 מוביל**. עמודה מרכזית ב-0 אומרת שהם מגיבים באותו הזמן.")
+    
+    lags = list(range(-ccf_max_lag, ccf_max_lag + 1))
+    corrs = []
+    
+    for lag in lags:
+        # הזזה שלילית משמעותה להביא את העתיד של B להווה של A (כדי לבדוק אם A מנבא את B)
+        temp_b = scatter_df[col_b].shift(-lag)
+        temp_df = pd.DataFrame({"a": scatter_df[col_a], "b": temp_b}).dropna()
+        if len(temp_df) > 3:
+            c, _ = stats.pearsonr(temp_df["a"], temp_df["b"])
+            corrs.append(c)
+        else:
+            corrs.append(np.nan)
+            
+    ccf_df = pd.DataFrame({"השהיה (Lag)": lags, "קורלציה": corrs})
+    fig_ccf = px.bar(ccf_df, x="השהיה (Lag)", y="קורלציה")
+    
+    # צביעת העמודה המקסימלית באדום
+    max_idx = ccf_df["קורלציה"].idxmax()
+    best_lag = ccf_df.loc[max_idx, "השהיה (Lag)"]
+    best_corr = ccf_df.loc[max_idx, "קורלציה"]
+    colors = ['#3b82f6'] * len(ccf_df)
+    colors[ccf_df[ccf_df["השהיה (Lag)"] == best_lag].index[0]] = '#ef4444'
+    
+    fig_ccf.update_traces(marker_color=colors)
+    fig_ccf.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(255,255,255,0.7)", margin=dict(t=20, b=20))
+    st.plotly_chart(fig_ccf, use_container_width=True)
+    
+    lead_text = f"**{col_a}** מוביל את **{col_b}**" if best_lag > 0 else f"**{col_b}** מוביל את **{col_a}**" if best_lag < 0 else "הנכסים מגיבים באותו זמן בדיוק (אין הובלה)."
+    st.success(f"📌 **תובנת מערכת:** הקורלציה החזקה ביותר ({best_corr:.3f}) נמצאה בהשהיה של **{best_lag}**. מסקנה: {lead_text}")
+    st.divider()
 
+# --- שאר הגרפים ---
+g1, g2 = st.columns([1, 1])
 with g1:
     st.markdown("<p class='section-title'>פיזור נתונים וקו מגמה</p>", unsafe_allow_html=True)
     fig_scatter = px.scatter(scatter_df, x=col_a, y=col_b, trendline="ols", labels={col_a: f"תשואה {col_a}", col_b: f"תשואה {col_b}"})
@@ -386,54 +427,35 @@ with t1:
 
 with t2:
     st.markdown("<p class='section-title'>ייצוא ואימות</p>", unsafe_allow_html=True)
-    
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
         summary_df.to_excel(writer, index=False, sheet_name='Correlation Data')
         worksheet = writer.sheets['Correlation Data']
-        
         try:
             cols = list(summary_df.columns)
-            
-            # --- התיקון: התאמת שם העמודה למצב "חלון שעות" ---
             if mode == "3. מהלך מסחר: חלון שעות":
-                ret1_col = f"תשואת חלון {asset1_name} (%)"
-                ret2_col = f"תשואת חלון {asset2_name} (%)"
+                ret1_col, ret2_col = f"תשואת חלון {asset1_name} (%)", f"תשואת חלון {asset2_name} (%)"
             else:
-                ret1_col = f"תשואה {asset1_name} (%)"
-                ret2_col = f"תשואה {asset2_name} (%)"
+                ret1_col, ret2_col = f"תשואה {asset1_name} (%)", f"תשואה {asset2_name} (%)"
                 
-            ret1_idx = cols.index(ret1_col) + 1
-            ret2_idx = cols.index(ret2_col) + 1
-            
-            c1_let = get_column_letter(ret1_idx)
-            c2_let = get_column_letter(ret2_idx)
+            ret1_idx, ret2_idx = cols.index(ret1_col) + 1, cols.index(ret2_col) + 1
+            c1_let, c2_let = get_column_letter(ret1_idx), get_column_letter(ret2_idx)
             form_col_let = get_column_letter(len(cols) + 2)
             num_rows = len(summary_df)
             
-            # --- נוסחת קורלציה ---
             worksheet[f"{form_col_let}1"] = "קורלציה (אקסל חי)"
             worksheet[f"{form_col_let}2"] = f"=CORREL({c1_let}2:{c1_let}{num_rows+1}, {c2_let}2:{c2_let}{num_rows+1})"
-            
-            # --- נוסחת ספירת התצפיות ---
             worksheet[f"{form_col_let}4"] = "תצפיות משותפות בפועל"
             worksheet[f"{form_col_let}5"] = f"=SUMPRODUCT(--ISNUMBER({c1_let}2:{c1_let}{num_rows+1}), --ISNUMBER({c2_let}2:{c2_let}{num_rows+1}))"
             
-            # עיצוב בסיסי לתאים שיהיו בולטים
             worksheet[f"{form_col_let}1"].font = Font(bold=True)
             worksheet[f"{form_col_let}4"].font = Font(bold=True)
             worksheet[f"{form_col_let}2"].fill = PatternFill(start_color="D1FAE5", end_color="D1FAE5", fill_type="solid")
             worksheet[f"{form_col_let}5"].fill = PatternFill(start_color="DBEAFE", end_color="DBEAFE", fill_type="solid")
         except ValueError:
-            pass # אם במקרה נדיר העמודה לא נמצאת, זה לא יקריס את האתר
+            pass
 
-    st.download_button(
-        label="📥 הורד נתונים (Excel) + נוסחאות", 
-        data=buffer.getvalue(), 
-        file_name=f"correlation_{asset1_name}_{asset2_name}.xlsx", 
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
-        use_container_width=True
-    )
+    st.download_button(label="📥 הורד נתונים (Excel) + נוסחאות", data=buffer.getvalue(), file_name=f"correlation_{asset1_name}_{asset2_name}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
     
     end_ts = int(pd.Timestamp.now().timestamp())
     start_ts = int((pd.Timestamp.now() - pd.Timedelta(days=days_back)).timestamp())
