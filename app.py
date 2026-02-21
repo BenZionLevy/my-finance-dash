@@ -10,16 +10,16 @@ import io
 st.set_page_config(page_title="ניתוח קורלציות מקצועי", layout="wide", page_icon="📊")
 
 # ==========================================
-# עיצוב CSS מותאם אישית (כולל תמונת רקע עדינה)
+# עיצוב CSS מותאם אישית (כולל תמונת רקע חדשה)
 # ==========================================
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;600;700&display=swap');
     
-    /* תמונת רקע לאפליקציה עם שכבת שקיפות בהירה לקריאות */
+    /* תמונת רקע חדשה, נקייה יותר */
     .stApp {
-        background: linear-gradient(rgba(248, 250, 252, 0.88), rgba(248, 250, 252, 0.95)), 
-                    url('https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?q=80&w=2070&auto=format&fit=crop');
+        background: linear-gradient(rgba(248, 250, 252, 0.92), rgba(248, 250, 252, 0.97)), 
+                    url('https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=2070&auto=format&fit=crop');
         background-size: cover;
         background-attachment: fixed;
         background-position: center;
@@ -75,16 +75,16 @@ st.markdown("""
     }
 
     .info-box {
-        background: rgba(255, 255, 255, 0.9);
+        background: rgba(255, 255, 255, 0.95);
         border-right: 4px solid #3b82f6;
         border-radius: 8px;
         padding: 1.2rem;
         color: #334155;
         direction: rtl;
-        text-align: right; /* יישור לימין לפרשנות כמותית */
+        text-align: right;
         font-size: 1.05rem;
         margin-bottom: 2rem;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
     }
 </style>
 """, unsafe_allow_html=True)
@@ -140,7 +140,7 @@ with st.sidebar:
     start_hour, end_hour, target_hour = None, None, None
     interval_choice, lag_minutes = "1d", 0
     
-    # הגדרת ברירת מחדל של ימים בהתאם לסוג הניתוח (365 ליומי, 60 לתוך יומי)
+    # הגדרת ברירת מחדל של ימים בהתאם לסוג הניתוח
     is_daily_mode = mode in ["1. יומי: שער סגירה רשמי", "2. יומי: שעה קבועה ביום"]
     max_days = 730 if is_daily_mode else 60
     default_days = 365 if is_daily_mode else 60
@@ -298,7 +298,7 @@ st.markdown(f"<h1 class='main-header'>ניתוח קורלציות מקצועי</
 st.markdown(f"<p class='sub-header'><span dir='ltr'><b>{asset1_name}</b></span> מול <span dir='ltr'><b>{asset2_name}</b></span> | {days_back} ימים אחורה | שעון ישראל</p>", unsafe_allow_html=True)
 
 if scatter_df.empty or len(scatter_df) < 3:
-    st.warning("⚠️ לא נמצאו מספיק נתונים משותפים לחישוב קורלציה אמינה בחלון הזמן שנבחר.")
+    st.warning("⚠️ לא נמצאו מספיק נתונים משותפים לחישוב קורלציה אמינה בחלון הזמן שנבחר. נסה להגדיל את מספר הימים אחורה.")
     st.stop()
 
 col_a, col_b = scatter_df.columns[0], scatter_df.columns[1]
@@ -332,7 +332,7 @@ with g1:
     fig_scatter = px.scatter(scatter_df, x=col_a, y=col_b, trendline="ols", labels={col_a: f"תשואה {col_a}", col_b: f"תשואה {col_b}"})
     
     # הוספת עיצוב טיפה שקוף לגרפים כדי להשתלב עם הרקע החדש
-    fig_scatter.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(255,255,255,0.6)")
+    fig_scatter.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(255,255,255,0.7)")
     fig_scatter.update_traces(marker=dict(size=7, opacity=0.8, color="#3b82f6"))
     st.plotly_chart(fig_scatter, use_container_width=True)
 
@@ -343,7 +343,7 @@ with g2:
         fig_roll = go.Figure()
         fig_roll.add_hline(y=0, line_dash="dash", line_color="gray")
         fig_roll.add_trace(go.Scatter(y=rolling_corr.values, mode="lines", fill="tozeroy", line=dict(color="#10b981", width=2)))
-        fig_roll.update_layout(yaxis=dict(range=[-1.1, 1.1], title="קורלציה"), margin=dict(t=10, b=10, l=10, r=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(255,255,255,0.6)")
+        fig_roll.update_layout(yaxis=dict(range=[-1.1, 1.1], title="קורלציה"), margin=dict(t=10, b=10, l=10, r=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(255,255,255,0.7)")
         st.plotly_chart(fig_roll, use_container_width=True)
     else:
         st.info("💡 בחר 'הצג גרף Rolling' בתפריט הצד (וודא שיש מספיק תצפיות) כדי לראות את שינוי הקורלציה על ציר הזמן.")
@@ -391,9 +391,9 @@ with t2:
 st.divider()
 st.markdown(
     """
-    <div style='text-align: center; color: #475569; font-size: 1.05rem; direction: rtl; padding: 10px; background-color: rgba(255,255,255,0.7); border-radius: 8px;'>
+    <div style='text-align: center; color: #475569; font-size: 1.05rem; direction: rtl; padding: 15px; background-color: rgba(255,255,255,0.8); border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'>
         <strong>האתר לצורכי מחקר, ועל אחריות המשתמש.</strong><br>
-        לשיתופי פעולה ניתן לפנות לטלפון: <span dir='ltr'>054-8810248</span>
+        לשיתופי פעולה ניתן לפנות לטלפון: <span dir='ltr' style='font-weight:600;'>054-8810248</span>
     </div>
     """, 
     unsafe_allow_html=True
