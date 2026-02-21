@@ -5,29 +5,57 @@ import numpy as np
 import plotly.express as px
 
 # הגדרות תצוגה
-st.set_page_config(page_title="Intraday Correlation Pro", layout="wide")
+st.set_page_config(page_title="ניתוח קורלציות", layout="wide")
 
-st.title("🔍 ניתוח קורלציות (כולל השהיה וטבלת אקסל)")
-st.write("בחר נכסים, חלון זמן ביום, וקבל את הקורלציה כולל פירוט יומי להורדה.")
+# ==========================================
+# 1. מנגנון סיסמה קלילה (1234)
+# ==========================================
+if 'authenticated' not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    st.markdown("<h1 style='text-align: center;'>ניתוח קורלציות</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; direction: rtl;'>הזן קוד גישה כדי לצפות במערכת:</p>", unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        pwd = st.text_input("סיסמה:", type="password", key="pwd_input", label_visibility="collapsed")
+        if pwd == "1234":
+            st.session_state.authenticated = True
+            st.rerun()
+        elif pwd != "":
+            st.error("קוד שגוי")
+    st.stop() # עוצר את טעינת שאר האתר אם אין סיסמה
+
+# ==========================================
+# 2. האתר המרכזי (מוצג רק לאחר סיסמה)
+# ==========================================
+st.markdown("<h1 style='text-align: right;'>ניתוח קורלציות</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: right; font-size: 13px; color: gray; direction: rtl;'>הערה: כל השעות המוצגות באתר נקבעו לפי שעון ישראל.</p>", unsafe_allow_html=True)
 
 # --- תפריט צד ---
-st.sidebar.header("הגדרות חיפוש")
+st.sidebar.markdown("<div dir='rtl'><b>בחר נכסים, חלון זמן ביום, וקבל את הקורלציה כולל פירוט יומי להורדה.</b></div>", unsafe_allow_html=True)
+st.sidebar.markdown("---")
+st.sidebar.markdown("<h3 style='text-align: right; direction: rtl;'>הגדרות חיפוש</h3>", unsafe_allow_html=True)
 
 default_tickers = {
     "לאומי": "LUMI.TA",
     "פועלים": "POLI.TA",
     "דיסקונט": "DSCT.TA",
+    "מדד ת\"א 35": "TA35.TA",
+    "מדד ת\"א 125": "TA125.TA",
+    "מדד בנקים 5": "TA-BANKS.TA",
     "S&P 500 Futures": "ES=F",
     'נאסד"ק 100': "NQ=F", 
     "USD/ILS": "ILS=X",
     "XLF (פיננסים ארה\"ב)": "XLF"
 }
 
-asset1 = st.sidebar.selectbox("נכס 1 (לדוגמה: מניה מקומית)", list(default_tickers.keys()), index=0)
-asset2 = st.sidebar.selectbox("נכס 2 (להשוואה, לדוגמה: מדד/דולר)", list(default_tickers.keys()), index=3)
+asset1 = st.sidebar.selectbox("נכס 1", list(default_tickers.keys()), index=0)
+asset2 = st.sidebar.selectbox("נכס 2", list(default_tickers.keys()), index=6)
 
 start_hour, end_hour = st.sidebar.select_slider(
-    "חלון זמן ביום (שעון ישראל)",
+    "חלון זמן ביום",
     options=[f"{h:02d}:00" for h in range(8, 23)],
     value=("10:00", "16:00")
 )
@@ -35,28 +63,23 @@ start_hour, end_hour = st.sidebar.select_slider(
 days_back = st.sidebar.number_input("ימים אחורה (עד 60)", min_value=1, max_value=60, value=14)
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("הגדרות מתקדמות")
-lag_minutes = st.sidebar.number_input("השהיה לנכס 2 (בדקות)", min_value=0, max_value=600, value=0, step=5, help="לדוגמה: 60 = נכס 2 נמצא בהשהיה של שעה אחורה.")
+st.sidebar.markdown("<h4 style='text-align: right; direction: rtl;'>הגדרות מתקדמות</h4>", unsafe_allow_html=True)
+lag_minutes = st.sidebar.number_input("השהיה לנכס 2 (בדקות)", min_value=0, max_value=600, value=0, step=5)
 
+# --- פונקציית משיכת נתונים ---
 @st.cache_data(ttl=600)
 def get_data(ticker1, ticker2, days):
     t1 = default_tickers[ticker1]
     t2 = default_tickers[ticker2]
     
-    # משיכת נתונים מיאהו
     df1 = yf.download(t1, period=f"{days}d", interval="5m")['Close']
     df2 = yf.download(t2, period=f"{days}d", interval="5m")['Close']
     
-    # הבטחה שהנתונים יתנהגו כעמודה בודדת ולא כטבלה מורכבת
-    if isinstance(df1, pd.DataFrame): 
-        df1 = df1.iloc[:, 0]
-    if isinstance(df2, pd.DataFrame): 
-        df2 = df2.iloc[:, 0]
+    if isinstance(df1, pd.DataFrame): df1 = df1.iloc[:, 0]
+    if isinstance(df2, pd.DataFrame): df2 = df2.iloc[:, 0]
     
-    # חיבור העמודות לטבלה אחת עם השמות הנכונים שבחרת
     full_df = pd.DataFrame({ticker1: df1, ticker2: df2})
     
-    # המרת אזור זמן לישראל
     try:
         full_df.index = full_df.index.tz_convert('Asia/Jerusalem')
     except:
@@ -64,17 +87,16 @@ def get_data(ticker1, ticker2, days):
         
     return full_df
 
-with st.spinner('מנתח נתונים, זה ייקח כמה שניות...'):
+with st.spinner('מנתח נתונים, זה עשוי לקחת מספר שניות...'):
     raw_df = get_data(asset1, asset2, days_back)
     
     if not raw_df.empty:
-        # סינון חלון הזמן הרלוונטי
         filtered_df = raw_df.between_time(start_hour, end_hour)
         
         if filtered_df.empty:
             st.error("לא נמצאו נתונים בחלון הזמן שנבחר.")
         else:
-            # --- 1. בניית טבלת סיכום יומית ---
+            # --- חישובים ובניית הטבלה ---
             records = []
             dates = np.unique(filtered_df.index.date)
             for d in dates:
@@ -85,12 +107,10 @@ with st.spinner('מנתח נתונים, זה ייקח כמה שניות...'):
                 valid_2 = day_data[asset2].dropna()
                 
                 if len(valid_1) > 0 and len(valid_2) > 0:
-                    # נתוני נכס 1
                     s_t1, e_t1 = valid_1.index[0], valid_1.index[-1]
                     p1_s, p1_e = valid_1.iloc[0], valid_1.iloc[-1]
                     ret1 = (p1_e - p1_s) / p1_s
                     
-                    # נתוני נכס 2
                     s_t2, e_t2 = valid_2.index[0], valid_2.index[-1]
                     p2_s, p2_e = valid_2.iloc[0], valid_2.iloc[-1]
                     ret2 = (p2_e - p2_s) / p2_s
@@ -111,49 +131,58 @@ with st.spinner('מנתח נתונים, זה ייקח כמה שניות...'):
             
             summary_df = pd.DataFrame(records)
 
-            # --- 2. חישוב קורלציה + השהיה ---
             returns_df = filtered_df.pct_change().dropna()
             
             if lag_minutes > 0:
-                lag_steps = lag_minutes // 5 # כל קפיצה היא 5 דקות
+                lag_steps = lag_minutes // 5
                 returns_df[asset2] = returns_df[asset2].shift(lag_steps)
                 returns_df = returns_df.dropna()
                 
             corr_value = returns_df[asset1].corr(returns_df[asset2])
             num_obs = len(returns_df)
             
-            # --- תצוגה עליונה ---
+            # --- תצוגה ---
             col1, col2, col3 = st.columns(3)
-            col1.metric(label=f"קורלציה סופית ({asset1} מול {asset2})", value=f"{corr_value:.2f}")
-            col2.metric(label="מספר תצפיות (בדיקות) שחושבו", value=num_obs)
-            col3.metric(label="השהיה שהופעלה לנכס 2", value=f"{lag_minutes} דקות")
+            col1.metric(label="קורלציה סופית", value=f"{corr_value:.2f}")
+            col2.metric(label="מספר תצפיות (בדיקות)", value=num_obs)
+            col3.metric(label="השהיה שהופעלה", value=f"{lag_minutes} דקות")
             
             st.divider()
             
-            # --- גרפים ---
             c1, c2 = st.columns([1, 1])
             with c1:
-                st.subheader("פיזור נתונים")
-                fig_scatter = px.scatter(returns_df, x=asset1, y=asset2, labels={asset1: f"תשואת {asset1}", asset2: f"תשואת {asset2} (בהשהיה)"})
+                st.markdown("<h4 style='text-align: right; direction: rtl;'>פיזור נתונים</h4>", unsafe_allow_html=True)
+                fig_scatter = px.scatter(returns_df, x=asset1, y=asset2)
                 st.plotly_chart(fig_scatter, use_container_width=True)
                 
             with c2:
-                st.subheader("תנועת מחירים מנורמלת")
+                st.markdown("<h4 style='text-align: right; direction: rtl;'>תנועת מחירים מנורמלת</h4>", unsafe_allow_html=True)
                 norm_df = (filtered_df.dropna() / filtered_df.dropna().iloc[0]) * 100
                 fig_line = px.line(norm_df)
                 st.plotly_chart(fig_line, use_container_width=True)
 
             st.divider()
 
-            # --- הצגת טבלה והורדה ---
-            st.subheader("📅 טבלת סיכום יומית (שערים ותשואות)")
+            st.markdown("<h4 style='text-align: right; direction: rtl;'>טבלת סיכום יומית</h4>", unsafe_allow_html=True)
             st.dataframe(summary_df, use_container_width=True)
             
-            # יצירת קובץ CSV תקין בעברית לאקסל
             csv = summary_df.to_csv(index=False, encoding='utf-8-sig')
             st.download_button(
                 label="📥 הורד נתונים לאקסל (CSV)",
                 data=csv,
-                file_name=f"correlation_data_{asset1}_{asset2}.csv",
+                file_name=f"correlation_{asset1}_{asset2}.csv",
                 mime="text/csv",
             )
+
+    # --- 3. אזור קישורים שימושיים בתחתית הדף ---
+    st.divider()
+    st.markdown("<h4 style='text-align: right; direction: rtl;'>🔗 קישורים שימושיים לבדיקת נתונים:</h4>", unsafe_allow_html=True)
+    st.markdown("""
+    <div dir='rtl' style='text-align: right;'>
+    <ul>
+        <li><a href='https://finance.yahoo.com/' target='_blank'>Yahoo Finance (נוח לבדיקת שער הדולר וחוזים עתידיים)</a></li>
+        <li><a href='https://il.investing.com/' target='_blank'>Investing.com ישראל (מצוין לבדיקת מניות ומדדים מקומיים)</a></li>
+        <li><a href='https://www.bizportal.co.il/' target='_blank'>Bizportal (לנתוני זמן אמת של בורסת תל אביב)</a></li>
+    </ul>
+    </div>
+    """, unsafe_allow_html=True)
