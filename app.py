@@ -7,7 +7,7 @@ import plotly.express as px
 st.set_page_config(page_title="ניתוח קורלציות", layout="wide")
 
 # ==========================================
-# מנגנון סיסמה חכם (הסיסמה הוסתרה מהטקסט)
+# מנגנון סיסמה חכם
 # ==========================================
 if st.query_params.get("pwd") == "1234":
     st.session_state.authenticated = True
@@ -69,7 +69,7 @@ interval_choice, lag_minutes = "5m", 0
 max_days = 60 if mode != "1. יומי: שער סגירה רשמי" else 730
 
 if mode == "2. יומי: שעה קבועה ביום":
-    target_hour = st.sidebar.selectbox("בחר שעה קבועה:", [f"{h:02d}:00" for h in range(8, 23)], index=8)
+    target_hour = st.sidebar.selectbox("בחר שעה קבועה:", [f"{h:02d}:00" for h in range(8, 23)], index=2) # Default 10:00
     interval_choice = "5m"
 elif mode == "3. מהלך מסחר: משעה עד שעה כל יום":
     start_hour, end_hour = st.sidebar.select_slider("חלון זמן יומי", options=[f"{h:02d}:00" for h in range(8, 23)], value=("10:00", "16:00"))
@@ -101,7 +101,6 @@ def get_data(ticker1, ticker2, days, yf_interval):
     
     full_df = pd.DataFrame({ticker1: df1, ticker2: df2})
     try:
-        # טיפול באזורי זמן גם כשהנתון הוא יומי
         if full_df.index.tz is None:
             full_df.index = full_df.index.tz_localize('UTC').tz_convert('Asia/Jerusalem')
         else:
@@ -131,27 +130,33 @@ with st.spinner('מנתח נתונים, זה עשוי לקחת מספר שניו
                         f"תשואה {asset1} (%)": round(float(returns_df.loc[d, asset1]) * 100, 2),
                         f"שער סגירה {asset2}": round(float(row[asset2]), 2),
                         f"תשואה {asset2} (%)": round(float(returns_df.loc[d, asset2]) * 100, 2),
+                        "הפרש תשואות (%)": round(float((returns_df.loc[d, asset1] - returns_df.loc[d, asset2]) * 100), 2)
                     })
                     
-        # --- מצב 2: שעה קבועה ---
+        # --- מצב 2: שעה קבועה (מתוקן ועמיד) ---
         elif mode == "2. יומי: שעה קבועה ביום":
-            target_time = pd.to_datetime(target_hour).time()
-            hour_df = raw_df.at_time(target_time)
+            # טווח חיפוש חכם: כל הנתונים של אותה שעה (למשל מ-10:00 עד 10:59)
+            target_end = f"{int(target_hour[:2]):02d}:59"
+            hour_df = raw_df.between_time(target_hour, target_end).dropna()
+            
             if not hour_df.empty:
-                returns_df = hour_df.pct_change().dropna()
+                # לוקחים רק את הרגע הראשון בכל יום שבו יש נתונים משותפים בתוך השעה הזו
+                daily_first_valid = hour_df.groupby(hour_df.index.date).first()
+                returns_df = daily_first_valid.pct_change().dropna()
                 scatter_df = returns_df
-                for d, row in hour_df.iterrows():
+                
+                for d, row in daily_first_valid.iterrows():
                     if d in returns_df.index:
                         records.append({
                             "תאריך": d.strftime("%d/%m/%Y"),
-                            "שעה נדגמת": d.strftime("%H:%M"),
                             f"שער {asset1}": round(float(row[asset1]), 2),
                             f"תשואה {asset1} (%)": round(float(returns_df.loc[d, asset1]) * 100, 2),
                             f"שער {asset2}": round(float(row[asset2]), 2),
                             f"תשואה {asset2} (%)": round(float(returns_df.loc[d, asset2]) * 100, 2),
+                            "הפרש תשואות (%)": round(float((returns_df.loc[d, asset1] - returns_df.loc[d, asset2]) * 100), 2)
                         })
             else:
-                st.warning("לא נמצאו מספיק נתונים לשעה הספציפית שנבחרה.")
+                st.warning(f"לא נמצאו נתונים משותפים לשני הנכסים בין השעות {target_hour} ל-{target_end}. ייתכן שאחת הבורסות סגורה.")
 
         # --- מצב 3: מהלך מסחר (משעה עד שעה) ---
         elif mode == "3. מהלך מסחר: משעה עד שעה כל יום":
@@ -180,6 +185,7 @@ with st.spinner('מנתח נתונים, זה עשוי לקחת מספר שניו
                         f"פתיחת חלון {asset2}": round(float(p2_s), 2),
                         f"סיום חלון {asset2}": round(float(p2_e), 2),
                         f"תשואה יומית בחלון {asset2} (%)": round(float(ret2) * 100, 2),
+                        "הפרש תשואות (%)": round(float((ret1 - ret2) * 100), 2)
                     })
             scatter_df = pd.DataFrame(calc_returns)
 
@@ -187,7 +193,6 @@ with st.spinner('מנתח נתונים, זה עשוי לקחת מספר שניו
         elif mode == "4. תוך-יומי: קפיצות זמן מוגדרות":
             filtered_df = raw_df.between_time(start_hour, end_hour)
             if lag_minutes > 0:
-                # חישוב כמה "קפיצות" צריך להשהות לפי סוג האינטרוול
                 int_mins_map = {"5m": 5, "15m": 15, "30m": 30, "60m": 60}
                 lag_steps = lag_minutes // int_mins_map[interval_choice]
                 filtered_df[asset2] = filtered_df[asset2].shift(lag_steps)
@@ -202,6 +207,7 @@ with st.spinner('מנתח נתונים, זה עשוי לקחת מספר שניו
                         f"תשואה {asset1} (%)": round(float(returns_df.loc[d, asset1]) * 100, 2),
                         f"שער {asset2}": round(float(row[asset2]), 2),
                         f"תשואה {asset2} (%)": round(float(returns_df.loc[d, asset2]) * 100, 2),
+                        "הפרש תשואות (%)": round(float((returns_df.loc[d, asset1] - returns_df.loc[d, asset2]) * 100), 2)
                     })
 
         # ==========================================
@@ -238,7 +244,8 @@ with st.spinner('מנתח נתונים, זה עשוי לקחת מספר שניו
                     use_container_width=True
                 )
         else:
-            st.error("לא נמצאו מספיק נתונים לחישוב קורלציה בחלון הנבחר.")
+            if not mode == "2. יומי: שעה קבועה ביום": # Already handled specific warning
+                st.error("לא נמצאו מספיק נתונים לחישוב קורלציה בחלון הנבחר.")
 
     # --- קישורים דינמיים לפי בחירת התקופה ---
     st.divider()
