@@ -24,24 +24,20 @@ def safe_round(val, mult=1.0):
 # ==========================================
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;600;700&display=swap');
+    /* ייבוא הגופן החדש - Rubik */
+    @import url('https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;600;700&display=swap');
     
-    /* תמונת רקע חדשה - אבסטרקט גיאומטרי נקי ופיננסי */
+    /* רקע מודרני, חלק ונקי ללא תמונה */
     .stApp {
-        background: linear-gradient(rgba(248, 250, 252, 0.88), rgba(248, 250, 252, 0.95)), 
-                    url('https://images.unsplash.com/photo-1604147495798-57beb5d6af73?q=80&w=2070&auto=format&fit=crop');
-        background-size: cover;
-        background-attachment: fixed;
-        background-position: center;
+        background: linear-gradient(135deg, #fcfcfd 0%, #e2e8f0 100%);
     }
     
     html, body, [class*="css"] {
-        font-family: 'Heebo', sans-serif;
+        font-family: 'Rubik', sans-serif;
         direction: rtl;
     }
 
-    /* === התיקון לחצים של תפריט הצד === */
-    /* עושה אפקט מראה לחצים כדי שיתאימו לממשק עברי */
+    /* תיקון החצים של תפריט הצד כך שיתאימו לעברית */
     [data-testid="collapsedControl"] svg,
     [data-testid="baseButton-header"] svg,
     [data-testid="baseButton-headerNoPadding"] svg,
@@ -103,7 +99,7 @@ st.markdown("""
         text-align: right;
         font-size: 1.05rem;
         margin-bottom: 2rem;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
     }
 </style>
 """, unsafe_allow_html=True)
