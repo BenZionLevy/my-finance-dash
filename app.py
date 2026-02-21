@@ -381,8 +381,17 @@ with t2:
         
         try:
             cols = list(summary_df.columns)
-            ret1_idx = cols.index(f"תשואה {asset1_name} (%)") + 1
-            ret2_idx = cols.index(f"תשואה {asset2_name} (%)") + 1
+            
+            # --- התיקון: התאמת שם העמודה למצב "חלון שעות" ---
+            if mode == "3. מהלך מסחר: חלון שעות":
+                ret1_col = f"תשואת חלון {asset1_name} (%)"
+                ret2_col = f"תשואת חלון {asset2_name} (%)"
+            else:
+                ret1_col = f"תשואה {asset1_name} (%)"
+                ret2_col = f"תשואה {asset2_name} (%)"
+                
+            ret1_idx = cols.index(ret1_col) + 1
+            ret2_idx = cols.index(ret2_col) + 1
             
             c1_let = get_column_letter(ret1_idx)
             c2_let = get_column_letter(ret2_idx)
@@ -393,7 +402,7 @@ with t2:
             worksheet[f"{form_col_let}1"] = "קורלציה (אקסל חי)"
             worksheet[f"{form_col_let}2"] = f"=CORREL({c1_let}2:{c1_let}{num_rows+1}, {c2_let}2:{c2_let}{num_rows+1})"
             
-            # --- נוסחת ספירת התצפיות שביקשת ---
+            # --- נוסחת ספירת התצפיות ---
             worksheet[f"{form_col_let}4"] = "תצפיות משותפות בפועל"
             worksheet[f"{form_col_let}5"] = f"=SUMPRODUCT(--ISNUMBER({c1_let}2:{c1_let}{num_rows+1}), --ISNUMBER({c2_let}2:{c2_let}{num_rows+1}))"
             
@@ -403,7 +412,7 @@ with t2:
             worksheet[f"{form_col_let}2"].fill = PatternFill(start_color="D1FAE5", end_color="D1FAE5", fill_type="solid")
             worksheet[f"{form_col_let}5"].fill = PatternFill(start_color="DBEAFE", end_color="DBEAFE", fill_type="solid")
         except ValueError:
-            pass
+            pass # אם במקרה נדיר העמודה לא נמצאת, זה לא יקריס את האתר
 
     st.download_button(
         label="📥 הורד נתונים (Excel) + נוסחאות", 
