@@ -10,13 +10,13 @@ import io
 st.set_page_config(page_title="ניתוח קורלציות מקצועי", layout="wide", page_icon="📊")
 
 # ==========================================
-# עיצוב CSS מותאם אישית (כולל תמונת רקע חדשה)
+# עיצוב CSS מותאם אישית
 # ==========================================
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;600;700&display=swap');
     
-    /* תמונת רקע חדשה, נקייה יותר */
+    /* תמונת רקע נקייה */
     .stApp {
         background: linear-gradient(rgba(248, 250, 252, 0.92), rgba(248, 250, 252, 0.97)), 
                     url('https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=2070&auto=format&fit=crop');
@@ -125,9 +125,9 @@ with st.sidebar:
         ticker1_sym = DEFAULT_TICKERS[asset1_name]
         ticker2_sym = DEFAULT_TICKERS[asset2_name]
         
-    # תיקון: מניעת בחירת אותו נכס פעמיים
+    # הגנה מפני בחירת אותו נכס פעמיים
     if ticker1_sym == ticker2_sym:
-        st.warning("⚠️ בחרת את אותו נכס פעמיים. אנא בחר שני נכסים שונים.")
+        st.error("⚠️ בחרת את אותו נכס פעמיים. אנא בחר שני נכסים שונים.")
         st.stop()
 
     st.divider()
@@ -145,7 +145,7 @@ with st.sidebar:
     start_hour, end_hour, target_hour = None, None, None
     interval_choice, lag_minutes = "1d", 0
     
-    # תיקון: רק מצב 1 נחשב 'יומי' לעניין כמות הימים, כי מצב 2 דורש נתונים תוך-יומיים
+    # הגדרת ימים - רק מצב 1 נחשב יומי מבחינת ה-API
     is_daily_mode = mode == "1. יומי: שער סגירה רשמי"
     max_days = 730 if is_daily_mode else 60
     default_days = 365 if is_daily_mode else 60
@@ -244,30 +244,46 @@ elif mode == "2. יומי: שעה קבועה ביום":
     target_end = f"{int(target_hour[:2]):02d}:59"
     hour_df = raw_df.between_time(target_hour, target_end).dropna(how="all")
     if not hour_df.empty:
-        daily = hour_df.dropna(how="any").groupby(hour_df.dropna(how="any").index.date).first()
+        # יצירת מזהה תאריך כמחרוזת כדי למנוע בעיות אינדקס
+        hour_df['date_str'] = hour_df.index.date.astype(str)
+        daily = hour_df.dropna(how="any").groupby('date_str').first()
         returns_df = daily.pct_change().dropna()
         scatter_df = returns_df.rename(columns={ticker1_sym: asset1_name, ticker2_sym: asset2_name})
-        for d in returns_df.index:
+        
+        # המרת האינדקס חזרה לאובייקטי תאריך כדי שהגרף יראה טוב
+        scatter_df.index = pd.to_datetime(scatter_df.index)
+        
+        for d_str in returns_df.index:
+            d_obj = pd.to_datetime(d_str)
             records.append({
-                "תאריך": d.strftime("%d/%m/%Y"),
-                f"שער {asset1_name}": round(float(daily.loc[d, ticker1_sym]), 2),
-                f"תשואה {asset1_name} (%)": round(float(returns_df.loc[d, ticker1_sym]) * 100, 2),
-                f"שער {asset2_name}": round(float(daily.loc[d, ticker2_sym]), 2),
-                f"תשואה {asset2_name} (%)": round(float(returns_df.loc[d, ticker2_sym]) * 100, 2),
-                "הפרש תשואות (%)": round(float((returns_df.loc[d, ticker1_sym] - returns_df.loc[d, ticker2_sym]) * 100), 2),
+                "תאריך": d_obj.strftime("%d/%m/%Y"),
+                f"שער {asset1_name}": round(float(daily.loc[d_str, ticker1_sym]), 2),
+                f"תשואה {asset1_name} (%)": round(float(returns_df.loc[d_str, ticker1_sym]) * 100, 2),
+                f"שער {asset2_name}": round(float(daily.loc[d_str, ticker2_sym]), 2),
+                f"תשואה {asset2_name} (%)": round(float(returns_df.loc[d_str, ticker2_sym]) * 100, 2),
+                "הפרש תשואות (%)": round(float((returns_df.loc[d_str, ticker1_sym] - returns_df.loc[d_str, ticker2_sym]) * 100), 2),
             })
 
 elif mode == "3. מהלך מסחר: חלון שעות":
     filtered = raw_df.between_time(start_hour, end_hour)
     dates = np.unique(filtered.index.date)
     calc = []
+    calc_dates = [] # שמירת התאריכים עבור האינדקס
+    
     for d in dates:
-        day = filtered.loc[str(d)]
+        try:
+            day = filtered.loc[str(d)]
+        except KeyError:
+            continue # הגנה מפני ימים חסרים
+            
         if len(day) < 2: continue
         v1, v2 = day[ticker1_sym].dropna(), day[ticker2_sym].dropna()
         if v1.empty or v2.empty: continue
+        
         ret1, ret2 = (v1.iloc[-1] - v1.iloc[0]) / v1.iloc[0], (v2.iloc[-1] - v2.iloc[0]) / v2.iloc[0]
         calc.append({asset1_name: ret1, asset2_name: ret2})
+        calc_dates.append(pd.to_datetime(d))
+        
         records.append({
             "תאריך": d.strftime("%d/%m/%Y"),
             f"פתיחה {asset1_name}": round(float(v1.iloc[0]), 2), f"סגירה {asset1_name}": round(float(v1.iloc[-1]), 2),
@@ -276,13 +292,16 @@ elif mode == "3. מהלך מסחר: חלון שעות":
             f"תשואת חלון {asset2_name} (%)": round(float(ret2) * 100, 2),
             "הפרש תשואות (%)": round(float((ret1 - ret2) * 100), 2),
         })
+        
     scatter_df = pd.DataFrame(calc)
+    if not scatter_df.empty:
+        scatter_df.index = calc_dates # הגדרת התאריכים כאינדקס!
 
 elif mode == "4. תוך-יומי: קפיצות זמן":
     filtered = raw_df.between_time(start_hour, end_hour).copy()
     if lag_minutes > 0:
         mins_map = {"5m": 5, "15m": 15, "30m": 30, "60m": 60}
-        # תיקון: חישוב מדויק יותר של הקפיצות למניעת חלוקה שמאפסת את הערך
+        # שימוש בחלוקה ועיגול לשלם למניעת תוצאת 0
         shift_periods = int(round(lag_minutes / mins_map[interval_choice]))
         if shift_periods > 0:
             filtered[ticker2_sym] = filtered[ticker2_sym].shift(shift_periods)
@@ -350,7 +369,7 @@ with g2:
         fig_roll = go.Figure()
         fig_roll.add_hline(y=0, line_dash="dash", line_color="gray")
         
-        # תיקון: הוספת x=rolling_corr.index כדי שציר הזמן יופיע כראוי
+        # שימוש באינדקס של scatter_df (שעכשיו מכיל תאריכים בכל המצבים)
         fig_roll.add_trace(go.Scatter(x=rolling_corr.index, y=rolling_corr.values, mode="lines", fill="tozeroy", line=dict(color="#10b981", width=2)))
         fig_roll.update_layout(yaxis=dict(range=[-1.1, 1.1], title="קורלציה"), margin=dict(t=10, b=10, l=10, r=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(255,255,255,0.7)")
         st.plotly_chart(fig_roll, use_container_width=True)
