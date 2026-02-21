@@ -124,6 +124,11 @@ with st.sidebar:
         asset2_name = st.selectbox("נכס 2", ticker_names, index=8) # Default USD/ILS
         ticker1_sym = DEFAULT_TICKERS[asset1_name]
         ticker2_sym = DEFAULT_TICKERS[asset2_name]
+        
+    # תיקון: מניעת בחירת אותו נכס פעמיים
+    if ticker1_sym == ticker2_sym:
+        st.warning("⚠️ בחרת את אותו נכס פעמיים. אנא בחר שני נכסים שונים.")
+        st.stop()
 
     st.divider()
 
@@ -140,8 +145,8 @@ with st.sidebar:
     start_hour, end_hour, target_hour = None, None, None
     interval_choice, lag_minutes = "1d", 0
     
-    # הגדרת ברירת מחדל של ימים בהתאם לסוג הניתוח
-    is_daily_mode = mode in ["1. יומי: שער סגירה רשמי", "2. יומי: שעה קבועה ביום"]
+    # תיקון: רק מצב 1 נחשב 'יומי' לעניין כמות הימים, כי מצב 2 דורש נתונים תוך-יומיים
+    is_daily_mode = mode == "1. יומי: שער סגירה רשמי"
     max_days = 730 if is_daily_mode else 60
     default_days = 365 if is_daily_mode else 60
 
@@ -277,7 +282,11 @@ elif mode == "4. תוך-יומי: קפיצות זמן":
     filtered = raw_df.between_time(start_hour, end_hour).copy()
     if lag_minutes > 0:
         mins_map = {"5m": 5, "15m": 15, "30m": 30, "60m": 60}
-        filtered[ticker2_sym] = filtered[ticker2_sym].shift(lag_minutes // mins_map[interval_choice])
+        # תיקון: חישוב מדויק יותר של הקפיצות למניעת חלוקה שמאפסת את הערך
+        shift_periods = int(round(lag_minutes / mins_map[interval_choice]))
+        if shift_periods > 0:
+            filtered[ticker2_sym] = filtered[ticker2_sym].shift(shift_periods)
+            
     returns_df = filtered.pct_change().dropna()
     scatter_df = returns_df.rename(columns={ticker1_sym: asset1_name, ticker2_sym: asset2_name})
     for d, row in filtered.iterrows():
@@ -294,7 +303,6 @@ elif mode == "4. תוך-יומי: קפיצות זמן":
 # ==========================================
 st.markdown(f"<h1 class='main-header'>ניתוח קורלציות מקצועי</h1>", unsafe_allow_html=True)
 
-# שימוש ב-span עם dir='ltr' כדי לפתור את בעיית הכיווניות בין עברית לאנגלית
 st.markdown(f"<p class='sub-header'><span dir='ltr'><b>{asset1_name}</b></span> מול <span dir='ltr'><b>{asset2_name}</b></span> | {days_back} ימים אחורה | שעון ישראל</p>", unsafe_allow_html=True)
 
 if scatter_df.empty or len(scatter_df) < 3:
@@ -331,7 +339,6 @@ with g1:
     st.markdown("<p class='section-title'>פיזור נתונים וקו מגמה</p>", unsafe_allow_html=True)
     fig_scatter = px.scatter(scatter_df, x=col_a, y=col_b, trendline="ols", labels={col_a: f"תשואה {col_a}", col_b: f"תשואה {col_b}"})
     
-    # הוספת עיצוב טיפה שקוף לגרפים כדי להשתלב עם הרקע החדש
     fig_scatter.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(255,255,255,0.7)")
     fig_scatter.update_traces(marker=dict(size=7, opacity=0.8, color="#3b82f6"))
     st.plotly_chart(fig_scatter, use_container_width=True)
@@ -342,7 +349,9 @@ with g2:
         rolling_corr = scatter_df[col_a].rolling(rolling_window).corr(scatter_df[col_b])
         fig_roll = go.Figure()
         fig_roll.add_hline(y=0, line_dash="dash", line_color="gray")
-        fig_roll.add_trace(go.Scatter(y=rolling_corr.values, mode="lines", fill="tozeroy", line=dict(color="#10b981", width=2)))
+        
+        # תיקון: הוספת x=rolling_corr.index כדי שציר הזמן יופיע כראוי
+        fig_roll.add_trace(go.Scatter(x=rolling_corr.index, y=rolling_corr.values, mode="lines", fill="tozeroy", line=dict(color="#10b981", width=2)))
         fig_roll.update_layout(yaxis=dict(range=[-1.1, 1.1], title="קורלציה"), margin=dict(t=10, b=10, l=10, r=10), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(255,255,255,0.7)")
         st.plotly_chart(fig_roll, use_container_width=True)
     else:
@@ -360,7 +369,6 @@ with t1:
 with t2:
     st.markdown("<p class='section-title'>ייצוא ואימות</p>", unsafe_allow_html=True)
     
-    # ייצוא לאקסל (XLSX)
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
         summary_df.to_excel(writer, index=False, sheet_name='Correlation Data')
