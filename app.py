@@ -1,10 +1,10 @@
 import streamlit as st
 import pandas as pd
-import statsmodels.api as sm
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from scipy import stats
+import statsmodels.api as sm
 import io
 import time
 from openpyxl.utils import get_column_letter
@@ -295,7 +295,7 @@ def run_market_scanner(target_tuple, basket_dict, days, interval_str, max_lags, 
                 s_asset = np.log(df_asset['close'] / df_asset['close'].shift(1)) if is_log else df_asset['close'].pct_change()
                 aligned = pd.DataFrame({"target": s_target, "asset": s_asset}).dropna()
                 
-                # סינון 1: חפיפה מספקת של נתונים (לפחות 75% ממניית המטרה)
+                # סינון 1: חפיפה מספקת של נתונים
                 # סינון 2: מניות לא סחירות (מניעת ימים של 0% שינוי)
                 if len(aligned) >= min_required_obs and (aligned["asset"] == 0).mean() < 0.25 and aligned["asset"].std() > 0:
                     best_lag = 0
@@ -306,7 +306,6 @@ def run_market_scanner(target_tuple, basket_dict, days, interval_str, max_lags, 
                         shifted = aligned["asset"].shift(lag)
                         temp = pd.DataFrame({"target": aligned["target"], "asset": shifted}).dropna()
                         
-                        # מוודאים שגם אחרי ההשהיה יש מספיק נתונים
                         if len(temp) >= (min_required_obs - abs(lag)):
                             c, _ = stats.pearsonr(temp["target"], temp["asset"])
                             if abs(c) > abs(best_corr):
@@ -360,9 +359,7 @@ if mode == "5. סורק שוק מורחב (מי מוביל את המניה?)":
     ⏳ **רזולוציה:** {interval_choice}, **ימים אחורה:** {days_back}.
     """)
     
-    # הוספת לחצן ההפעלה
     if st.button("🚀 התחל סריקת שוק עכשיו", type="primary", use_container_width=True):
-        
         with st.spinner("שואב נתונים, מסנן מניות יבשות ומחשב קורלציות מתקדמות... אנא המתן."):
             scanner_results = run_market_scanner(
                 ticker1_tuple, 
@@ -372,63 +369,68 @@ if mode == "5. סורק שוק מורחב (מי מוביל את המניה?)":
                 max_lag_to_check, 
                 use_log_returns
             )
+            
+            # שומרים את התוצאות במשתנה ה-session state כדי שלא יימחקו כשלחצים על הלחצן הבא
+            st.session_state['scanner_results'] = scanner_results
+
+    # מציגים את התוצאות מהסריקה (אם קיימות בזיכרון)
+    if 'scanner_results' in st.session_state and not st.session_state['scanner_results'].empty:
+        scanner_results = st.session_state['scanner_results']
         
-        if not scanner_results.empty:
-            # פונקציה מיוחדת לעיצוב השורות לפי עוצמת הקורלציה
-            def style_rows(row):
-                corr = row['קורלציה מקסימלית']
-                if abs(corr) >= 0.5:
-                    # קורלציה חזקה: מודגש, וצבע ירוק או אדום בהתאם לכיוון
-                    color = '#047857' if corr > 0 else '#b91c1c'
-                    return [f'font-weight: bold; color: {color};'] * len(row)
-                else:
-                    # קורלציה בינונית: כתב רגיל וקצת יותר חלש (אפרפר)
-                    return ['font-weight: normal; color: #64748b;'] * len(row)
-                
-            st.dataframe(
-                scanner_results.style.apply(style_rows, axis=1).format({'קורלציה מקסימלית': '{:.3f}'}),
-                use_container_width=True,
-                height=600,
-                hide_index=True
-            )
+        def style_rows(row):
+            corr = row['קורלציה מקסימלית']
+            if abs(corr) >= 0.5:
+                color = '#047857' if corr > 0 else '#b91c1c'
+                return [f'font-weight: bold; color: {color};'] * len(row)
+            else:
+                return ['font-weight: normal; color: #64748b;'] * len(row)
             
-            best_asset = scanner_results.iloc[0]
-            st.success(f"🏆 **הנכס המשפיע ביותר על מניית המטרה:** {best_asset['נכס השוואה']} (קורלציה: {best_asset['קורלציה מקסימלית']:.3f}). \n\n**תזמון:** {best_asset['משמעות']}.")
-        else:
-            st.warning("לא נמצאו מספיק נתונים לחישוב הסריקה. נסה להגדיל את כמות הימים או לבדוק את הטיקר.")
-            
-    st.stop() # עוצר כאן כדי לא להציג את הגרפים הרגילים של מצבים 1-4
+        st.dataframe(
+            scanner_results.style.apply(style_rows, axis=1).format({'קורלציה מקסימלית': '{:.3f}'}),
+            use_container_width=True,
+            height=400,
+            hide_index=True
+        )
+        
+        best_asset = scanner_results.iloc[0]
+        st.success(f"🏆 **הנכס המשפיע ביותר על מניית המטרה:** {best_asset['נכס השוואה']} (קורלציה: {best_asset['קורלציה מקסימלית']:.3f}). \n\n**תזמון:** {best_asset['משמעות']}.")
 
-# ==========================================
-            # המשך למצב 5: מודל השפעה משולבת
-            # ==========================================
-            st.divider()
-            st.markdown("<div class='section-title'>🧠 השפעה משולבת (רגרסיה מרובה)</div>", unsafe_allow_html=True)
-            st.info("כאן נבדוק כמה אחוזים מהתנועה של המניה מוסברים על ידי שילוב של הנכסים המובילים יחד (Adjusted R-Squared), תוך שכל אחד מהם מוזז לזמן ההשהיה (Lag) המדויק שלו.")
+        # ==========================================
+        # המשך למצב 5: מודל השפעה משולבת
+        # ==========================================
+        st.divider()
+        st.markdown("<div class='section-title'>🧠 השפעה משולבת (רגרסיה מרובה)</div>", unsafe_allow_html=True)
+        st.info("כאן נבדוק כמה אחוזים מהתנועה של המניה מוסברים על ידי שילוב של הנכסים המובילים יחד (Adjusted R-Squared), תוך שכל אחד מהם מוזז לזמן ההשהיה (Lag) המדויק שלו.")
 
-            max_assets_available = len(scanner_results)
-            num_to_include = st.slider("כמה נכסים מראש הטבלה לשלב במודל?", min_value=2, max_value=max_assets_available, value=min(10, max_assets_available))
-            st.caption("💡 טיפ סטטיסטי: שילוב של עשרות נכסים בעלי קורלציה גבוהה בינם לבין עצמם עלול לעוות את המודל (קוליניאריות). מומלץ להתמקד בטופ 5-15.")
+        max_assets_available = len(scanner_results)
+        slider_val = st.slider("כמה נכסים מראש הטבלה לשלב במודל?", min_value=2, max_value=max_assets_available, value=min(10, max_assets_available))
+        st.caption("💡 טיפ סטטיסטי: שילוב של עשרות נכסים בעלי קורלציה גבוהה בינם לבין עצמם עלול לעוות את המודל (קוליניאריות). מומלץ להתמקד בטופ 5-15.")
 
-            if st.button("🔮 חשב מודל משולב עכשיו", type="primary"):
-                with st.spinner("אוסף נתונים, מזיז לפי זמני ההשהיה (Lag) ובונה מודל סטטיסטי מורכב..."):
-                    assets_to_use = scanner_results.head(num_to_include)
+        if st.button("🔮 חשב מודל משולב עכשיו", type="primary"):
+            with st.spinner("אוסף נתונים, מזיז לפי זמני ההשהיה (Lag) ובונה מודל סטטיסטי מורכב..."):
+                tv = TvDatafeed()
+                tv_intervals = {"1d": Interval.in_daily, "5m": Interval.in_5_minute, "15m": Interval.in_15_minute, "30m": Interval.in_30_minute, "60m": Interval.in_1_hour}
+                inter = tv_intervals.get(interval_choice, Interval.in_daily)
+                bars_per_day = 1 if interval_choice == "1d" else (8 * 60) // int(interval_choice.replace('m',''))
+                total_bars = min(days_back * bars_per_day, 4900)
 
-                    # משיכת נתוני מניית המטרה מחדש כעוגן
-                    df_target = fetch_data_tv(ticker1_tuple, ticker1_tuple, days_back, interval_choice)
-                    target_col = ticker1_tuple[0]
-                    target_returns = calculate_returns(df_target[target_col], use_log_returns).rename("Target")
+                # שאיבת מניית המטרה
+                df_target = tv.get_hist(symbol=ticker1_tuple[0], exchange=ticker1_tuple[1], interval=inter, n_bars=total_bars)
+                if df_target is not None and not df_target.empty:
+                    target_returns = np.log(df_target['close'] / df_target['close'].shift(1)) if use_log_returns else df_target['close'].pct_change()
+                    target_returns = target_returns.rename("Target")
 
                     features = []
+                    assets_to_use = scanner_results.head(slider_val)
+
                     for _, row in assets_to_use.iterrows():
                         asset_name = row['נכס השוואה']
                         lag = row['זמן השהיה (Lag)']
                         sym_tuple = SCANNER_BASKET[asset_name]
 
-                        df_asset = fetch_data_tv(sym_tuple, sym_tuple, days_back, interval_choice)
-                        if not df_asset.empty:
-                            asset_col = sym_tuple[0]
-                            asset_ret = calculate_returns(df_asset[asset_col], use_log_returns)
+                        df_asset = tv.get_hist(symbol=sym_tuple[0], exchange=sym_tuple[1], interval=inter, n_bars=total_bars)
+                        if df_asset is not None and not df_asset.empty:
+                            asset_ret = np.log(df_asset['close'] / df_asset['close'].shift(1)) if use_log_returns else df_asset['close'].pct_change()
                             # הזזת הנתונים בדיוק לפי ה-Lag שנמצא בסריקה
                             shifted_ret = asset_ret.shift(lag).rename(asset_name)
                             features.append(shifted_ret)
@@ -436,7 +438,7 @@ if mode == "5. סורק שוק מורחב (מי מוביל את המניה?)":
                     # איחוד כל הנתונים לטבלה אחת וניקוי שורות ללא חפיפה מלאה
                     df_model = pd.concat([target_returns] + features, axis=1).dropna()
 
-                    if len(df_model) > num_to_include + 5: # וידוא שיש מספיק תצפיות ביחס למספר המשתנים
+                    if len(df_model) > slider_val + 5: # וידוא שיש מספיק תצפיות ביחס למספר המשתנים
                         y = df_model["Target"]
                         X = df_model.drop(columns=["Target"])
                         X = sm.add_constant(X)
@@ -445,8 +447,9 @@ if mode == "5. סורק שוק מורחב (מי מוביל את המניה?)":
                             model = sm.OLS(y, X).fit()
                             r_squared_adj = model.rsquared_adj
 
-                            st.success(f"🎯 **כוח הסבר משולב נטו (Adjusted R²): {r_squared_adj*100:.1f}%**")
-                            st.write(f"המודל נבנה על בסיס **{len(df_model)} תצפיות משותפות ורצופות** לאחר יישום ההשהיות של כולם.")
+                            c1, c2 = st.columns(2)
+                            c1.success(f"🎯 **כוח הסבר משולב נטו (Adjusted R²): {r_squared_adj*100:.1f}%**")
+                            c2.info(f"המודל נבנה על בסיס **{len(df_model)} תצפיות משותפות ורצופות** לאחר יישום ההשהיות של כולם.")
 
                             summary_table = pd.DataFrame({
                                 "מקדם (השפעה נטו)": model.params,
@@ -455,7 +458,6 @@ if mode == "5. סורק שוק מורחב (מי מוביל את המניה?)":
 
                             summary_table["מובהק בשילוב?"] = summary_table["P-Value"].apply(lambda p: "✅ כן" if p < 0.05 else "❌ לא (נבלע ע\"י אחרים)")
 
-                            # עיצוב הטבלה
                             def style_pvalue(val):
                                 return 'color: #047857; font-weight: bold;' if "✅" in val else 'color: #b91c1c;'
 
@@ -466,10 +468,32 @@ if mode == "5. סורק שוק מורחב (מי מוביל את המניה?)":
                                 use_container_width=True
                             )
 
+                            # יצירת הגרף להשוואה בין התשואה בפועל לתשואה שהמודל חזה
+                            predictions = model.predict(X)
+                            
+                            fig_pred = go.Figure()
+                            fig_pred.add_trace(go.Scatter(x=df_model.index, y=y, mode='lines', name='תשואה בפועל (Target)', line=dict(color='#3b82f6', width=2)))
+                            fig_pred.add_trace(go.Scatter(x=df_model.index, y=predictions, mode='lines', name='תשואה חזויה (Model)', line=dict(color='#f59e0b', width=2, dash='dot')))
+                            
+                            fig_pred.update_layout(
+                                title=f"השוואת תשואות: בפועל לעומת חזוי (מודל משולב)",
+                                title_x=0.5,
+                                template="plotly_white",
+                                hovermode="x unified",
+                                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                            )
+                            st.plotly_chart(fig_pred, use_container_width=True)
+
                         except Exception as e:
                             st.error(f"⚠️ שגיאה בחישוב המודל הסטטיסטי: {e}. ייתכן שיש קוליניאריות מוחלטת בין הנכסים שבחרת.")
                     else:
                         st.warning("❌ אין מספיק נתונים משותפים לבניית המודל לאחר יישום זמני ההשהיה של כל הנכסים יחד.")
+    elif 'scanner_results' not in st.session_state:
+        pass
+    else:
+        st.warning("לא נמצאו מספיק נתונים לחישוב הסריקה. נסה להגדיל את כמות הימים או לבדוק את הטיקר.")
+            
+    st.stop() # עוצר כאן כדי לא להציג את הגרפים הרגילים של מצבים 1-4
 
 # ==========================================
 # עיבוד הנתונים למצבים 1 עד 4
