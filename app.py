@@ -198,13 +198,8 @@ with st.expander("לחץ כאן לפתיחה/סגירה של פאנל ההגדר
         elif mode == "5. סורק שוק מורחב (מי מוביל את המניה?)":
             int_map = {"5 דקות": "5m", "15 דקות": "15m", "30 דקות": "30m", "1 שעה": "60m", "יומי": "1d"}
             interval_choice = int_map[st.selectbox("רזולוציית סריקה:", list(int_map.keys()), index=0)]
-            
-            # המתג החדש לבחירה בין סריקה מהירה למעמיקה
-            use_lag = st.toggle("🔍 סריקה מעמיקה עם השהיות (Cross-Correlation - איטי יותר)", value=False)
-            if use_lag:
-                max_lag_to_check = st.number_input("כמה נרות לבדוק אחורה/קדימה (Lag)?", min_value=1, max_value=20, value=6)
-            else:
-                max_lag_to_check = 0 # 0 אומר שלא בודקים השהיות אחורה/קדימה, מה שהופך את הסריקה למהירה מאוד
+            # הסורק תמיד רץ עם השהיות עכשיו, לפי מספר הנרות שהוזן
+            max_lag_to_check = st.number_input("כמה נרות לבדוק אחורה/קדימה (Lag)?", min_value=1, max_value=20, value=6)
 
         days_back = st.number_input("כמה ימים אחורה לנתח?", min_value=1, max_value=max_days, value=default_days)
     
@@ -285,7 +280,6 @@ def run_market_scanner(target_tuple, basket_dict, days, interval_str, max_lags, 
     status_text = st.empty()
 
     for i, (name, sym_tuple) in enumerate(items):
-        # מניעת השוואה של הנכס לעצמו בטבלה
         if sym_tuple[0] == target_tuple[0] and sym_tuple[1] == target_tuple[1]:
             progress_bar.progress((i + 1) / len(items))
             continue
@@ -297,9 +291,11 @@ def run_market_scanner(target_tuple, basket_dict, days, interval_str, max_lags, 
                 s_asset = np.log(df_asset['close'] / df_asset['close'].shift(1)) if is_log else df_asset['close'].pct_change()
                 aligned = pd.DataFrame({"target": s_target, "asset": s_asset}).dropna()
                 
-                if len(aligned) > 30:
+                # סינון מניות לא סחירות: אם ליותר מ-25% מהנרות יש שינוי של 0%, זו מניה בעייתית
+                if len(aligned) > 30 and (aligned["asset"] == 0).mean() < 0.25 and aligned["asset"].std() > 0:
                     best_lag = 0
                     best_corr = 0
+                    best_n = 0
                     
                     for lag in range(-max_lags, max_lags + 1):
                         shifted = aligned["asset"].shift(lag)
@@ -309,24 +305,28 @@ def run_market_scanner(target_tuple, basket_dict, days, interval_str, max_lags, 
                             if abs(c) > abs(best_corr):
                                 best_corr = c
                                 best_lag = lag
+                                best_n = len(temp)
 
-                    time_unit = "דקות" if 'm' in interval_str else "ימים"
-                    mins = int(interval_str.replace('m','')) if 'm' in interval_str else 1
-                    time_diff = abs(best_lag) * mins
-                    
-                    if best_lag > 0:
-                        meaning = f"הנכס מקדים את המניה ב-{time_diff} {time_unit}"
-                    elif best_lag < 0:
-                        meaning = f"המניה מקדימה את הנכס ב-{time_diff} {time_unit}"
-                    else:
-                        meaning = "תנועה מסונכרנת (ללא השהיה)"
+                    # הוספה לטבלה רק אם יש קורלציה של לפחות 0.20 (סינון הקורלציות החלשות מאוד)
+                    if abs(best_corr) >= 0.20:
+                        time_unit = "דקות" if 'm' in interval_str else "ימים"
+                        mins = int(interval_str.replace('m','')) if 'm' in interval_str else 1
+                        time_diff = abs(best_lag) * mins
+                        
+                        if best_lag > 0:
+                            meaning = f"הנכס מקדים את המניה ב-{time_diff} {time_unit}"
+                        elif best_lag < 0:
+                            meaning = f"המניה מקדימה את הנכס ב-{time_diff} {time_unit}"
+                        else:
+                            meaning = "תנועה מסונכרנת (ללא השהיה)"
 
-                    results.append({
-                        "נכס השוואה": name,
-                        "קורלציה מקסימלית": best_corr,
-                        "זמן השהיה (Lag)": best_lag,
-                        "משמעות": meaning
-                    })
+                        results.append({
+                            "נכס השוואה": name,
+                            "קורלציה מקסימלית": best_corr,
+                            "זמן השהיה (Lag)": best_lag,
+                            "תצפיות בפועל": best_n,
+                            "משמעות": meaning
+                        })
         except: pass
             
         progress_bar.progress((i + 1) / len(items))
@@ -347,17 +347,16 @@ if mode == "5. סורק שוק מורחב (מי מוביל את המניה?)":
     st.markdown(f"<div class='section-title'>🌍 סורק שוק גלובלי: מי מזיז את {asset1_name}?</div>", unsafe_allow_html=True)
     
     st.info(f"""
-    **סקירה נרחבת מול כ-{len(SCANNER_BASKET)} נכסים ומדדים!**
-    המערכת מוכנה לסרוק את מניית המטרה שלך מול רשימה של מעל 100 מניות נבחרות (מת"א 125, מדדים גלובליים ודולר-שקל).
+    **סקירה מעמיקה מול כ-{len(SCANNER_BASKET)} נכסים ומדדים!**
+    המערכת מחשבת קורלציות, מסננת אוטומטית מניות "יבשות" ללא סחירות, ומציגה רק קשרים עם משמעות.
     
     ⏳ **רזולוציה:** {interval_choice}, **ימים אחורה:** {days_back}.
-    {'⚠️ **סריקה עם השהיות (Lag) מופעלת** - הפעולה עשויה לקחת קצת זמן.' if use_lag else '⚡ **סריקה מהירה** (ללא השהיות) מופעלת.'}
     """)
     
     # הוספת לחצן ההפעלה
     if st.button("🚀 התחל סריקת שוק עכשיו", type="primary", use_container_width=True):
         
-        with st.spinner("שואב נתונים ומחשב קורלציות מתקדמות... אנא המתן."):
+        with st.spinner("שואב נתונים, מסנן מניות יבשות ומחשב קורלציות מתקדמות... אנא המתן."):
             scanner_results = run_market_scanner(
                 ticker1_tuple, 
                 SCANNER_BASKET, 
@@ -368,16 +367,22 @@ if mode == "5. סורק שוק מורחב (מי מוביל את המניה?)":
             )
         
         if not scanner_results.empty:
-            def color_corr(val):
-                if isinstance(val, float):
-                    color = '#047857' if val > 0.4 else '#b91c1c' if val < -0.4 else 'black'
-                    return f'color: {color}; font-weight: bold;'
-                return ''
+            # פונקציה מיוחדת לעיצוב השורות לפי עוצמת הקורלציה
+            def style_rows(row):
+                corr = row['קורלציה מקסימלית']
+                if abs(corr) >= 0.5:
+                    # קורלציה חזקה: מודגש, וצבע ירוק או אדום בהתאם לכיוון
+                    color = '#047857' if corr > 0 else '#b91c1c'
+                    return [f'font-weight: bold; color: {color};'] * len(row)
+                else:
+                    # קורלציה בינונית: כתב רגיל וקצת יותר חלש (אפרפר)
+                    return ['font-weight: normal; color: #64748b;'] * len(row)
                 
             st.dataframe(
-                scanner_results.style.map(color_corr, subset=['קורלציה מקסימלית']).format({'קורלציה מקסימלית': '{:.3f}'}),
+                scanner_results.style.apply(style_rows, axis=1).format({'קורלציה מקסימלית': '{:.3f}'}),
                 use_container_width=True,
-                height=600
+                height=600,
+                hide_index=True
             )
             
             best_asset = scanner_results.iloc[0]
