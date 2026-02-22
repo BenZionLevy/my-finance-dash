@@ -5,3 +5,4 @@ plotly
 scipy
 openpyxl
 git+https://github.com/rongardF/tvdatafeed.git
+statsmodels
