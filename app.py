@@ -5,9 +5,10 @@ import plotly.express as px
 import plotly.graph_objects as go
 from scipy import stats
 import io
+import time
 from openpyxl.utils import get_column_letter
 
-# ייבוא ספריית TradingView במקום יאהו
+# ייבוא ספריית TradingView
 from tvDatafeed import TvDatafeed, Interval
 
 st.set_page_config(page_title="ניתוח קורלציות מקצועי", layout="wide", page_icon="📊")
@@ -20,7 +21,7 @@ def safe_round(val, mult=1.0):
     return round(float(val) * mult, 2)
 
 # ==========================================
-# עיצוב CSS מותאם אישית (מודרני ומותאם לנייד)
+# עיצוב CSS מותאם אישית
 # ==========================================
 st.markdown("""
 <style>
@@ -70,11 +71,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown(f"<h1 class='main-header'>ניתוח קורלציות מקצועי</h1>", unsafe_allow_html=True)
-st.markdown(f"<p class='sub-header'>מצא קשרים מובהקים בין נכסים פיננסיים (Powered by TradingView)</p>", unsafe_allow_html=True)
+st.markdown("<h1 class='main-header'>ניתוח קורלציות מקצועי</h1>", unsafe_allow_html=True)
+st.markdown("<p class='sub-header'>מצא קשרים מובהקים בין נכסים פיננסיים (Powered by TradingView)</p>", unsafe_allow_html=True)
 
 # ==========================================
-# הגדרות נכסים ל-TradingView (סימול, בורסה)
+# הגדרות נכסים
 # ==========================================
 DEFAULT_TICKERS = {
     "לאומי": ("LUMI", "TASE"), 
@@ -88,18 +89,42 @@ DEFAULT_TICKERS = {
     "USD/ILS": ("USDILS", "FX_IDC")
 }
 
+# סל נכסים עבור אופציית הסורק (מצב 5)
+SCANNER_BASKET = {
+    "S&P 500 (חוזה עתידי)": ("ES1!", "CME_MINI"),
+    "NASDAQ 100 (חוזה עתידי)": ("NQ1!", "CME_MINI"),
+    "דאו ג'ונס (חוזה עתידי)": ("YM1!", "CBOT_MINI"),
+    "USD/ILS (דולר-שקל)": ("USDILS", "FX_IDC"),
+    "מדד ת\"א 35": ("TA35", "TASE"),
+    "מדד ת\"א 125": ("TA125", "TASE"),
+    "מדד הבנקים": ("TA_BANKS5", "TASE"),
+    "מדד נדל\"ן": ("TA_REALESTATE", "TASE"),
+    "לאומי": ("LUMI", "TASE"),
+    "פועלים": ("POLI", "TASE"),
+    "דיסקונט": ("DSCT", "TASE"),
+    "מזרחי טפחות": ("MZTF", "TASE"),
+    "בינלאומי": ("FIBI", "TASE"),
+    "נייס": ("NICE", "TASE"),
+    "טבע": ("TEVA", "TASE"),
+    "אלביט מערכות": ("ESLT", "TASE"),
+    "קבוצת עזריאלי": ("AZRG", "TASE"),
+    "איי.סי.אל": ("ICL", "TASE"),
+    "הפניקס": ("PHOE", "TASE")
+    # ניתן להוסיף כאן עוד מניות מה-125...
+}
+
 st.markdown("<div class='section-title'>⚙️ שלב 1: הגדרות הניתוח</div>", unsafe_allow_html=True)
 
 with st.expander("לחץ כאן לפתיחה/סגירה של פאנל ההגדרות", expanded=True):
     col_opt1, col_opt2, col_opt3 = st.columns(3)
     
     with col_opt1:
-        st.markdown("**1️⃣ בחירת נכסים**")
+        st.markdown("**1️⃣ בחירת נכס מטרה**")
         use_custom = st.checkbox("הזן טיקר חופשי (מתקדם)", value=False)
         if use_custom:
-            st.caption("פורמט: בורסה:סימול (למשל TASE:LUMI או NASDAQ:AAPL)")
-            custom1 = st.text_input("נכס 1:", value="NASDAQ:AAPL").upper().strip()
-            custom2 = st.text_input("נכס 2:", value="NASDAQ:MSFT").upper().strip()
+            st.caption("פורמט: בורסה:סימול (למשל TASE:LUMI)")
+            custom1 = st.text_input("נכס 1 (מטרה):", value="TASE:LUMI").upper().strip()
+            custom2 = st.text_input("נכס 2 (להשוואה רגילה):", value="NASDAQ:MSFT").upper().strip()
             asset1_name, asset2_name = custom1, custom2
             try:
                 exch1, sym1 = custom1.split(":")
@@ -111,20 +136,19 @@ with st.expander("לחץ כאן לפתיחה/סגירה של פאנל ההגדר
                 st.stop()
         else:
             ticker_names = list(DEFAULT_TICKERS.keys())
-            asset1_name = st.selectbox("נכס 1", ticker_names, index=0)
-            asset2_name = st.selectbox("נכס 2", ticker_names, index=2)
+            asset1_name = st.selectbox("נכס 1 (מטרה)", ticker_names, index=0) # ברירת מחדל לאומי
+            asset2_name = st.selectbox("נכס 2 (להשוואה רגילה)", ticker_names, index=3)
             ticker1_tuple = DEFAULT_TICKERS[asset1_name]
             ticker2_tuple = DEFAULT_TICKERS[asset2_name]
-            
-        if ticker1_tuple == ticker2_tuple:
-            st.error("⚠️ בחרת את אותו נכס פעמיים. אנא בחר שני נכסים שונים.")
-            st.stop()
 
     with col_opt2:
-        st.markdown("**2️⃣ זמנים וסוג תשואה**")
+        st.markdown("**2️⃣ זמנים וסוג פעולה**")
         mode = st.radio("מבנה הניתוח:", [
-            "1. יומי: שער סגירה רשמי", "2. יומי: שעה קבועה ביום",
-            "3. מהלך מסחר: חלון שעות", "4. תוך-יומי: קפיצות זמן"
+            "1. יומי: שער סגירה רשמי", 
+            "2. יומי: שעה קבועה ביום",
+            "3. מהלך מסחר: חלון שעות", 
+            "4. תוך-יומי: קפיצות זמן",
+            "5. סורק שוק מורחב (מי מוביל את המניה?)"
         ])
         return_type = st.radio("סוג תשואה:", ["אחוז שינוי רגיל (Simple)", "תשואה לוגריתמית (Log)"])
         use_log_returns = "לוגריתמית" in return_type
@@ -133,9 +157,10 @@ with st.expander("לחץ כאן לפתיחה/סגירה של פאנל ההגדר
         st.markdown("**3️⃣ חלון זמן ומתקדם**")
         start_hour, end_hour, target_hour = None, None, None
         interval_choice, lag_minutes = "1d", 0
+        max_lag_to_check = 6 # רלוונטי למצב 5
         
         is_daily_mode = mode == "1. יומי: שער סגירה רשמי"
-        max_days = 500 if is_daily_mode else 30 # הגבלות משיכה של TV ללא חשבון פרימיום
+        max_days = 500 if is_daily_mode else 30 
         default_days = 200 if is_daily_mode else 10
 
         if mode == "2. יומי: שעה קבועה ביום":
@@ -152,61 +177,48 @@ with st.expander("לחץ כאן לפתיחה/סגירה של פאנל ההגדר
                 lag_minutes = st.number_input("השהיה לנכס 2 (בדקות):", min_value=0, max_value=600, value=0, step=5)
             else:
                 interval_choice = "5m"
+        elif mode == "5. סורק שוק מורחב (מי מוביל את המניה?)":
+            int_map = {"5 דקות": "5m", "15 דקות": "15m", "30 דקות": "30m", "1 שעה": "60m", "יומי": "1d"}
+            interval_choice = int_map[st.selectbox("רזולוציית סריקה:", list(int_map.keys()), index=0)]
+            max_lag_to_check = st.number_input("כמה נרות לבדוק אחורה/קדימה (Lag)?", min_value=1, max_value=20, value=6)
 
         days_back = st.number_input("כמה ימים אחורה לנתח?", min_value=1, max_value=max_days, value=default_days)
     
     st.divider()
     c_adv1, c_adv2 = st.columns(2)
     with c_adv1:
-        show_rolling = st.checkbox("הצג מפת קורלציה מתגלגלת (Rolling Correlation)", value=True)
-        if show_rolling:
+        show_rolling = st.checkbox("הצג מפת קורלציה מתגלגלת (Rolling Correlation)", value=True, disabled=(mode=="5. סורק שוק מורחב (מי מוביל את המניה?)"))
+        if show_rolling and mode != "5. סורק שוק מורחב (מי מוביל את המניה?)":
             rolling_window = st.slider("גודל חלון Rolling:", min_value=5, max_value=100, value=20)
     with c_adv2:
-        show_ccf = st.checkbox("🔍 מצא מי מגיב למי (Cross-Correlation)", value=False)
-        if show_ccf:
+        show_ccf = st.checkbox("🔍 מצא מי מגיב למי (Cross-Correlation)", value=False, disabled=(mode=="5. סורק שוק מורחב (מי מוביל את המניה?)"))
+        if show_ccf and mode != "5. סורק שוק מורחב (מי מוביל את המניה?)":
             ccf_max_lag = st.slider("מספר השהיות מקסימלי לבדיקה:", min_value=1, max_value=20, value=10)
 
 # ==========================================
-# פונקציות חישוב ומשיכה (מעודכן ל-TradingView)
+# פונקציות חישוב ומשיכה
 # ==========================================
 @st.cache_data(ttl=600, show_spinner=False)
 def fetch_data_tv(sym1_tuple, sym2_tuple, days, interval_str):
     try:
-        # אתחול חיבור אנונימי ל-TradingView
         tv = TvDatafeed()
-        
-        # המרת הזמן לפורמט של הספרייה
-        tv_intervals = {
-            "1d": Interval.in_daily,
-            "5m": Interval.in_5_minute,
-            "15m": Interval.in_15_minute,
-            "30m": Interval.in_30_minute,
-            "60m": Interval.in_1_hour
-        }
+        tv_intervals = {"1d": Interval.in_daily, "5m": Interval.in_5_minute, "15m": Interval.in_15_minute, "30m": Interval.in_30_minute, "60m": Interval.in_1_hour}
         inter = tv_intervals.get(interval_str, Interval.in_daily)
-        
-        # חישוב כמות נרות (Bars) בערך
         bars_per_day = 1 if interval_str == "1d" else (8 * 60) // int(interval_str.replace('m',''))
-        total_bars = min(days * bars_per_day, 4900) # מקסימום שרת חופשי
+        total_bars = min(days * bars_per_day, 4900)
         
-        # משיכת נתונים
         df1 = tv.get_hist(symbol=sym1_tuple[0], exchange=sym1_tuple[1], interval=inter, n_bars=total_bars)
         df2 = tv.get_hist(symbol=sym2_tuple[0], exchange=sym2_tuple[1], interval=inter, n_bars=total_bars)
         
-        if df1 is None or df1.empty or df2 is None or df2.empty:
-            return pd.DataFrame()
+        if df1 is None or df1.empty or df2 is None or df2.empty: return pd.DataFrame()
             
         s1 = df1['close'].rename(sym1_tuple[0])
         s2 = df2['close'].rename(sym2_tuple[0])
         
-        # איחוד הטבלאות, ומילוי פערים קטנים אם יש (Forward Fill)
         combined = pd.DataFrame({sym1_tuple[0]: s1, sym2_tuple[0]: s2}).ffill().dropna(how="all")
         
-        # סידור אזור זמן לישראל
-        if combined.index.tz is None:
-            combined.index = combined.index.tz_localize("UTC").tz_convert("Asia/Jerusalem")
-        else:
-            combined.index = combined.index.tz_convert("Asia/Jerusalem")
+        if combined.index.tz is None: combined.index = combined.index.tz_localize("UTC").tz_convert("Asia/Jerusalem")
+        else: combined.index = combined.index.tz_convert("Asia/Jerusalem")
             
         return combined
     except Exception as e:
@@ -229,9 +241,121 @@ def calculate_returns(df, is_log):
     if is_log: return np.log(df / df.shift(1))
     return df.pct_change()
 
+# פונקציה לסריקת שוק מרובה נכסים (ללא Cache כדי שה-Progress Bar יעבוד בצורה חלקה)
+def run_market_scanner(target_tuple, basket_dict, days, interval_str, max_lags, is_log):
+    tv = TvDatafeed()
+    tv_intervals = {"1d": Interval.in_daily, "5m": Interval.in_5_minute, "15m": Interval.in_15_minute, "30m": Interval.in_30_minute, "60m": Interval.in_1_hour}
+    inter = tv_intervals.get(interval_str, Interval.in_daily)
+    bars_per_day = 1 if interval_str == "1d" else (8 * 60) // int(interval_str.replace('m',''))
+    total_bars = min(days * bars_per_day, 4900)
+
+    # משיכת מניית המטרה
+    df_target = tv.get_hist(symbol=target_tuple[0], exchange=target_tuple[1], interval=inter, n_bars=total_bars)
+    if df_target is None or df_target.empty: return pd.DataFrame()
+    s_target = np.log(df_target['close'] / df_target['close'].shift(1)) if is_log else df_target['close'].pct_change()
+    s_target = s_target.dropna()
+
+    results = []
+    items = list(basket_dict.items())
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+
+    for i, (name, sym_tuple) in enumerate(items):
+        status_text.text(f"🔍 בודק קורלציה מול: {name}...")
+        try:
+            df_asset = tv.get_hist(symbol=sym_tuple[0], exchange=sym_tuple[1], interval=inter, n_bars=total_bars)
+            if df_asset is not None and not df_asset.empty:
+                s_asset = np.log(df_asset['close'] / df_asset['close'].shift(1)) if is_log else df_asset['close'].pct_change()
+                aligned = pd.DataFrame({"target": s_target, "asset": s_asset}).dropna()
+                
+                if len(aligned) > 30:
+                    best_lag = 0
+                    best_corr = 0
+                    
+                    for lag in range(-max_lags, max_lags + 1):
+                        shifted = aligned["asset"].shift(lag)
+                        temp = pd.DataFrame({"target": aligned["target"], "asset": shifted}).dropna()
+                        if len(temp) > 30:
+                            c, _ = stats.pearsonr(temp["target"], temp["asset"])
+                            if abs(c) > abs(best_corr):
+                                best_corr = c
+                                best_lag = lag
+
+                    time_unit = "דקות" if 'm' in interval_str else "ימים"
+                    mins = int(interval_str.replace('m','')) if 'm' in interval_str else 1
+                    time_diff = abs(best_lag) * mins
+                    
+                    if best_lag > 0:
+                        meaning = f"הנכס מקדים את המניה ב-{time_diff} {time_unit}"
+                    elif best_lag < 0:
+                        meaning = f"המניה מקדימה את הנכס ב-{time_diff} {time_unit}"
+                    else:
+                        meaning = "תנועה מסונכרנת (ללא השהיה)"
+
+                    results.append({
+                        "נכס השוואה": name,
+                        "קורלציה מקסימלית": best_corr,
+                        "זמן השהיה (Lag)": best_lag,
+                        "משמעות": meaning
+                    })
+        except: pass
+            
+        progress_bar.progress((i + 1) / len(items))
+        time.sleep(0.1) # מניעת חסימה משרתי TradingView
+
+    status_text.empty()
+    progress_bar.empty()
+    
+    if not results: return pd.DataFrame()
+    res_df = pd.DataFrame(results)
+    res_df['R_abs'] = res_df['קורלציה מקסימלית'].abs()
+    return res_df.sort_values(by='R_abs', ascending=False).drop(columns=['R_abs']).reset_index(drop=True)
+
 # ==========================================
-# עיבוד הנתונים
+# ניתוב למצב סורק שוק (מצב 5)
 # ==========================================
+if mode == "5. סורק שוק מורחב (מי מוביל את המניה?)":
+    st.markdown(f"<div class='section-title'>🌍 סורק שוק גלובלי: מי מזיז את {asset1_name}?</div>", unsafe_allow_html=True)
+    st.info(f"מריץ סריקה של **{asset1_name}** מול סל של {len(SCANNER_BASKET)} נכסים ומדדים. התהליך עשוי לקחת מספר שניות.")
+    
+    with st.spinner("שואב נתונים ומחשב קורלציות מתקדמות..."):
+        scanner_results = run_market_scanner(
+            ticker1_tuple, 
+            SCANNER_BASKET, 
+            days_back, 
+            interval_choice, 
+            max_lag_to_check, 
+            use_log_returns
+        )
+    
+    if not scanner_results.empty:
+        def color_corr(val):
+            if isinstance(val, float):
+                color = '#047857' if val > 0.4 else '#b91c1c' if val < -0.4 else 'black'
+                return f'color: {color}; font-weight: bold;'
+            return ''
+            
+        st.dataframe(
+            scanner_results.style.map(color_corr, subset=['קורלציה מקסימלית']).format({'קורלציה מקסימלית': '{:.3f}'}),
+            use_container_width=True,
+            height=450
+        )
+        
+        best_asset = scanner_results.iloc[0]
+        st.success(f"🏆 **הנכס המשפיע ביותר:** {best_asset['נכס השוואה']} (קורלציה: {best_asset['קורלציה מקסימלית']:.3f}). \n\n**תזמון:** {best_asset['משמעות']}.")
+    else:
+        st.warning("לא נמצאו מספיק נתונים לחישוב הסריקה. נסה להגדיל את כמות הימים או לבדוק את הטיקר.")
+    
+    st.stop() # עוצר כאן כדי לא להציג את הגרפים הרגילים של מצבים 1-4
+
+# ==========================================
+# עיבוד הנתונים למצבים 1 עד 4
+# ==========================================
+if ticker1_tuple == ticker2_tuple:
+    st.error("⚠️ בחרת את אותו נכס פעמיים. אנא בחר שני נכסים שונים.")
+    st.stop()
+
 with st.spinner("🔄 שואב נתוני TradingView בזמן אמת..."):
     raw_df = fetch_data_tv(ticker1_tuple, ticker2_tuple, days_back, interval_choice)
 
@@ -337,7 +461,7 @@ elif mode == "4. תוך-יומי: קפיצות זמן":
         })
 
 # ==========================================
-# שלב 2: תצוגת תוצאות
+# שלב 2: תצוגת תוצאות מצבים 1-4
 # ==========================================
 st.markdown("<div class='section-title'>📊 שלב 2: תוצאות הניתוח</div>", unsafe_allow_html=True)
 st.markdown(f"<p class='sub-header' style='margin-bottom: 1rem;'><span dir='ltr'><b>{asset1_name}</b></span> מול <span dir='ltr'><b>{asset2_name}</b></span></p>", unsafe_allow_html=True)
