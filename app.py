@@ -132,6 +132,18 @@ SCANNER_BASKET = {
     "מקס סטוק": ("MAXO", "TASE"), "אלטשולר שחם": ("ALTF", "TASE"), "פריורטק": ("PRTC", "TASE")
 }
 
+# רשימת נכסי מאקרו שיכנסו תמיד לטבלה, גם אם הקורלציה שלהם נמוכה
+MACRO_ASSETS = [
+    "S&P 500 (חוזה עתידי)", 
+    "NASDAQ 100 (חוזה עתידי)", 
+    "דאו ג'ונס (חוזה עתידי)", 
+    "USD/ILS (דולר-שקל)", 
+    "מדד ת\"א 35", 
+    "מדד ת\"א 125", 
+    "מדד הבנקים",
+    "מדד נדל\"ן"
+]
+
 st.markdown("<div class='section-title'>⚙️ שלב 1: הגדרות הניתוח</div>", unsafe_allow_html=True)
 
 with st.expander("לחץ כאן לפתיחה/סגירה של פאנל ההגדרות", expanded=True):
@@ -313,8 +325,10 @@ def run_market_scanner(target_tuple, basket_dict, days, interval_str, max_lags, 
                                 best_lag = lag
                                 best_n = len(temp)
 
-                    # הוספה לטבלה רק אם יש קורלציה של לפחות 0.20
-                    if abs(best_corr) >= 0.20:
+                    # הוספה לטבלה אם הקורלציה גבוהה מ-0.20 או אם מדובר בנכס מאקרו שהגדרנו מראש
+                    is_macro = name in MACRO_ASSETS
+                    
+                    if abs(best_corr) >= 0.20 or is_macro:
                         time_unit = "דקות" if 'm' in interval_str else "ימים"
                         mins = int(interval_str.replace('m','')) if 'm' in interval_str else 1
                         time_diff = abs(best_lag) * mins
@@ -354,7 +368,7 @@ if mode == "5. סורק שוק מורחב (מי מוביל את המניה?)":
     
     st.info(f"""
     **סקירה מעמיקה מול כ-{len(SCANNER_BASKET)} נכסים ומדדים!**
-    המערכת מחשבת קורלציות, מסננת אוטומטית מניות "יבשות" ללא סחירות, ומציגה רק קשרים עם משמעות.
+    המערכת מחשבת קורלציות, מסננת אוטומטית מניות "יבשות" ללא סחירות, ומציגה רק קשרים עם משמעות. מדדי מאקרו (כמו S&P 500 ודולר) יוצגו תמיד לקבלת קונטקסט שוק מלא.
     
     ⏳ **רזולוציה:** {interval_choice}, **ימים אחורה:** {days_back}.
     """)
@@ -400,94 +414,113 @@ if mode == "5. סורק שוק מורחב (מי מוביל את המניה?)":
         # ==========================================
         st.divider()
         st.markdown("<div class='section-title'>🧠 השפעה משולבת (רגרסיה מרובה)</div>", unsafe_allow_html=True)
-        st.info("כאן נבדוק כמה אחוזים מהתנועה של המניה מוסברים על ידי שילוב של הנכסים המובילים יחד (Adjusted R-Squared), תוך שכל אחד מהם מוזז לזמן ההשהיה (Lag) המדויק שלו.")
+        st.info("כאן נבדוק כמה אחוזים מהתנועה של המניה מוסברים על ידי שילוב של הנכסים המובילים יחד, תוך שכל אחד מהם מוזז לזמן ההשהיה (Lag) המדויק שלו.")
 
-        max_assets_available = len(scanner_results)
-        slider_val = st.slider("כמה נכסים מראש הטבלה לשלב במודל?", min_value=2, max_value=max_assets_available, value=min(10, max_assets_available))
-        st.caption("💡 טיפ סטטיסטי: שילוב של עשרות נכסים בעלי קורלציה גבוהה בינם לבין עצמם עלול לעוות את המודל (קוליניאריות). מומלץ להתמקד בטופ 5-15.")
+        # יצירת רשימת בחירה מרובה (Checkbox-like) במקום סליידר
+        available_assets = scanner_results['נכס השוואה'].tolist()
+        default_selection = available_assets[:min(5, len(available_assets))] # ברירת מחדל: 5 הראשונים
+        
+        st.markdown("**בחר את הנכסים שתרצה להכניס למודל המשולב:**")
+        selected_assets_names = st.multiselect("נכסים נבחרים לרגרסיה:", available_assets, default=default_selection)
+        
+        st.caption("💡 טיפ סטטיסטי: שילוב של יותר מדי נכסים שעושים תנועה זהה (למשל גם ת\"א 35 וגם ת\"א 125) עלול לעוות את המודל. מומלץ לבחור נכסים המייצגים כוחות שונים.")
 
         if st.button("🔮 חשב מודל משולב עכשיו", type="primary"):
-            with st.spinner("אוסף נתונים, מזיז לפי זמני ההשהיה (Lag) ובונה מודל סטטיסטי מורכב..."):
-                tv = TvDatafeed()
-                tv_intervals = {"1d": Interval.in_daily, "5m": Interval.in_5_minute, "15m": Interval.in_15_minute, "30m": Interval.in_30_minute, "60m": Interval.in_1_hour}
-                inter = tv_intervals.get(interval_choice, Interval.in_daily)
-                bars_per_day = 1 if interval_choice == "1d" else (8 * 60) // int(interval_choice.replace('m',''))
-                total_bars = min(days_back * bars_per_day, 4900)
+            if len(selected_assets_names) < 2:
+                st.warning("⚠️ אנא בחר לפחות 2 נכסים כדי לחשב השפעה משולבת.")
+            else:
+                with st.spinner("אוסף נתונים, מזיז לפי זמני ההשהיה (Lag) ובונה מודל סטטיסטי מורכב..."):
+                    tv = TvDatafeed()
+                    tv_intervals = {"1d": Interval.in_daily, "5m": Interval.in_5_minute, "15m": Interval.in_15_minute, "30m": Interval.in_30_minute, "60m": Interval.in_1_hour}
+                    inter = tv_intervals.get(interval_choice, Interval.in_daily)
+                    bars_per_day = 1 if interval_choice == "1d" else (8 * 60) // int(interval_choice.replace('m',''))
+                    total_bars = min(days_back * bars_per_day, 4900)
 
-                # שאיבת מניית המטרה
-                df_target = tv.get_hist(symbol=ticker1_tuple[0], exchange=ticker1_tuple[1], interval=inter, n_bars=total_bars)
-                if df_target is not None and not df_target.empty:
-                    target_returns = np.log(df_target['close'] / df_target['close'].shift(1)) if use_log_returns else df_target['close'].pct_change()
-                    target_returns = target_returns.rename("Target")
+                    # שאיבת מניית המטרה
+                    df_target = tv.get_hist(symbol=ticker1_tuple[0], exchange=ticker1_tuple[1], interval=inter, n_bars=total_bars)
+                    if df_target is not None and not df_target.empty:
+                        target_returns = np.log(df_target['close'] / df_target['close'].shift(1)) if use_log_returns else df_target['close'].pct_change()
+                        target_returns = target_returns.rename("Target")
 
-                    features = []
-                    assets_to_use = scanner_results.head(slider_val)
+                        features = []
+                        # סינון הטבלה רק לנכסים שהמשתמש בחר
+                        assets_to_use = scanner_results[scanner_results['נכס השוואה'].isin(selected_assets_names)]
 
-                    for _, row in assets_to_use.iterrows():
-                        asset_name = row['נכס השוואה']
-                        lag = row['זמן השהיה (Lag)']
-                        sym_tuple = SCANNER_BASKET[asset_name]
+                        for _, row in assets_to_use.iterrows():
+                            asset_name = row['נכס השוואה']
+                            lag = row['זמן השהיה (Lag)']
+                            sym_tuple = SCANNER_BASKET[asset_name]
 
-                        df_asset = tv.get_hist(symbol=sym_tuple[0], exchange=sym_tuple[1], interval=inter, n_bars=total_bars)
-                        if df_asset is not None and not df_asset.empty:
-                            asset_ret = np.log(df_asset['close'] / df_asset['close'].shift(1)) if use_log_returns else df_asset['close'].pct_change()
-                            # הזזת הנתונים בדיוק לפי ה-Lag שנמצא בסריקה
-                            shifted_ret = asset_ret.shift(lag).rename(asset_name)
-                            features.append(shifted_ret)
+                            df_asset = tv.get_hist(symbol=sym_tuple[0], exchange=sym_tuple[1], interval=inter, n_bars=total_bars)
+                            if df_asset is not None and not df_asset.empty:
+                                asset_ret = np.log(df_asset['close'] / df_asset['close'].shift(1)) if use_log_returns else df_asset['close'].pct_change()
+                                # הזזת הנתונים בדיוק לפי ה-Lag שנמצא בסריקה
+                                shifted_ret = asset_ret.shift(lag).rename(asset_name)
+                                features.append(shifted_ret)
 
-                    # איחוד כל הנתונים לטבלה אחת וניקוי שורות ללא חפיפה מלאה
-                    df_model = pd.concat([target_returns] + features, axis=1).dropna()
+                        # איחוד כל הנתונים לטבלה אחת וניקוי שורות ללא חפיפה מלאה
+                        df_model = pd.concat([target_returns] + features, axis=1).dropna()
 
-                    if len(df_model) > slider_val + 5: # וידוא שיש מספיק תצפיות ביחס למספר המשתנים
-                        y = df_model["Target"]
-                        X = df_model.drop(columns=["Target"])
-                        X = sm.add_constant(X)
+                        if len(df_model) > len(selected_assets_names) + 5: # וידוא שיש מספיק תצפיות
+                            y = df_model["Target"]
+                            X = df_model.drop(columns=["Target"])
+                            X = sm.add_constant(X)
 
-                        try:
-                            model = sm.OLS(y, X).fit()
-                            r_squared_adj = model.rsquared_adj
+                            try:
+                                model = sm.OLS(y, X).fit()
+                                r_squared_adj = model.rsquared_adj
 
-                            c1, c2 = st.columns(2)
-                            c1.success(f"🎯 **כוח הסבר משולב נטו (Adjusted R²): {r_squared_adj*100:.1f}%**")
-                            c2.info(f"המודל נבנה על בסיס **{len(df_model)} תצפיות משותפות ורצופות** לאחר יישום ההשהיות של כולם.")
+                                c1, c2 = st.columns(2)
+                                c1.success(f"🎯 **כוח הסבר משולב נטו (Adjusted R²): {r_squared_adj*100:.1f}%**")
+                                c2.info(f"המודל נבנה על בסיס **{len(df_model)} תצפיות משותפות ורצופות** לאחר יישום ההשהיות של כולם.")
 
-                            summary_table = pd.DataFrame({
-                                "מקדם (השפעה נטו)": model.params,
-                                "P-Value": model.pvalues
-                            }).drop("const", errors="ignore")
+                                summary_table = pd.DataFrame({
+                                    "מקדם (השפעה נטו)": model.params,
+                                    "P-Value (רמת מובהקות)": model.pvalues
+                                }).drop("const", errors="ignore")
 
-                            summary_table["מובהק בשילוב?"] = summary_table["P-Value"].apply(lambda p: "✅ כן" if p < 0.05 else "❌ לא (נבלע ע\"י אחרים)")
+                                summary_table["מובהק בשילוב?"] = summary_table["P-Value (רמת מובהקות)"].apply(lambda p: "✅ כן" if p < 0.05 else "❌ לא (נבלע ע\"י אחרים)")
 
-                            def style_pvalue(val):
-                                return 'color: #047857; font-weight: bold;' if "✅" in val else 'color: #b91c1c;'
+                                def style_pvalue(val):
+                                    return 'color: #047857; font-weight: bold;' if "✅" in val else 'color: #b91c1c;'
 
-                            st.dataframe(
-                                summary_table.style
-                                .format({"מקדם (השפעה נטו)": "{:.4f}", "P-Value": "{:.4f}"})
-                                .map(style_pvalue, subset=["מובהק בשילוב?"]),
-                                use_container_width=True
-                            )
+                                st.dataframe(
+                                    summary_table.style
+                                    .format({"מקדם (השפעה נטו)": "{:.4f}", "P-Value (רמת מובהקות)": "{:.4f}"})
+                                    .map(style_pvalue, subset=["מובהק בשילוב?"]),
+                                    use_container_width=True
+                                )
+                                
+                                # קוביית הסבר קבועה וברורה מתחת לטבלה
+                                with st.expander("❓ איך לקרוא את התוצאות האלה? (הסבר מפורט)", expanded=True):
+                                    st.markdown("""
+                                    * **Adjusted R² (כוח הסבר נטו):** זהו הציון הכולל של המודל. אם יצא 60%, המשמעות היא שהנכסים שבחרת מסבירים ביחד 60% מהתנועה של מניית המטרה.
+                                    * **מקדם (השפעה נטו):** מראה בכמה אחוזים תזוז מניית המטרה כאשר הנכס הזה זז ב-1%, **בהנחה ששאר הנכסים במודל נשארו במקום ולא זזו**. אם המקדם שלילי, הקשר הוא הפוך.
+                                    * **P-Value (רמת מובהקות):** האם הנכס באמת תורם מידע חדש ורלוונטי למודל? 
+                                      * **✅ כן (P < 0.05):** הנכס משפיע באופן עצמאי ומובהק, והוא לא סתם חיקוי של נכס אחר.
+                                      * **❌ לא (נבלע ע"י אחרים):** כנראה שהנכס הזה עושה תנועות דומות מאוד לנכס אחר שכבר הוספת למודל (למשל, הוספת גם את ת"א 35 וגם את ת"א 125 שעולים ויורדים כמעט יחד). המודל הסטטיסטי מזהה את ה"כפילות" הזו ואומר לך: "אני לא צריך את שניהם כדי להבין מה קורה בשוק, אחד מהם מיותר".
+                                    """)
 
-                            # יצירת הגרף להשוואה בין התשואה בפועל לתשואה שהמודל חזה
-                            predictions = model.predict(X)
-                            
-                            fig_pred = go.Figure()
-                            fig_pred.add_trace(go.Scatter(x=df_model.index, y=y, mode='lines', name='תשואה בפועל (Target)', line=dict(color='#3b82f6', width=2)))
-                            fig_pred.add_trace(go.Scatter(x=df_model.index, y=predictions, mode='lines', name='תשואה חזויה (Model)', line=dict(color='#f59e0b', width=2, dash='dot')))
-                            
-                            fig_pred.update_layout(
-                                title=f"השוואת תשואות: בפועל לעומת חזוי (מודל משולב)",
-                                title_x=0.5,
-                                template="plotly_white",
-                                hovermode="x unified",
-                                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-                            )
-                            st.plotly_chart(fig_pred, use_container_width=True)
+                                # יצירת הגרף להשוואה בין התשואה בפועל לתשואה שהמודל חזה
+                                predictions = model.predict(X)
+                                
+                                fig_pred = go.Figure()
+                                fig_pred.add_trace(go.Scatter(x=df_model.index, y=y, mode='lines', name='תשואה בפועל (Target)', line=dict(color='#3b82f6', width=2)))
+                                fig_pred.add_trace(go.Scatter(x=df_model.index, y=predictions, mode='lines', name='תשואה חזויה ע"י המודל', line=dict(color='#f59e0b', width=2, dash='dot')))
+                                
+                                fig_pred.update_layout(
+                                    title=f"השוואת תשואות: בפועל לעומת החיזוי של המודל המשולב",
+                                    title_x=0.5,
+                                    template="plotly_white",
+                                    hovermode="x unified",
+                                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+                                )
+                                st.plotly_chart(fig_pred, use_container_width=True)
 
-                        except Exception as e:
-                            st.error(f"⚠️ שגיאה בחישוב המודל הסטטיסטי: {e}. ייתכן שיש קוליניאריות מוחלטת בין הנכסים שבחרת.")
-                    else:
-                        st.warning("❌ אין מספיק נתונים משותפים לבניית המודל לאחר יישום זמני ההשהיה של כל הנכסים יחד.")
+                            except Exception as e:
+                                st.error(f"⚠️ שגיאה בחישוב המודל הסטטיסטי: {e}. ייתכן שיש קוליניאריות מוחלטת בין הנכסים שבחרת.")
+                        else:
+                            st.warning("❌ אין מספיק נתונים משותפים לבניית המודל לאחר יישום זמני ההשהיה של כל הנכסים יחד.")
     elif 'scanner_results' not in st.session_state:
         pass
     else:
