@@ -198,7 +198,13 @@ with st.expander("לחץ כאן לפתיחה/סגירה של פאנל ההגדר
         elif mode == "5. סורק שוק מורחב (מי מוביל את המניה?)":
             int_map = {"5 דקות": "5m", "15 דקות": "15m", "30 דקות": "30m", "1 שעה": "60m", "יומי": "1d"}
             interval_choice = int_map[st.selectbox("רזולוציית סריקה:", list(int_map.keys()), index=0)]
-            max_lag_to_check = st.number_input("כמה נרות לבדוק אחורה/קדימה (Lag)?", min_value=1, max_value=20, value=6)
+            
+            # המתג החדש לבחירה בין סריקה מהירה למעמיקה
+            use_lag = st.toggle("🔍 סריקה מעמיקה עם השהיות (Cross-Correlation - איטי יותר)", value=False)
+            if use_lag:
+                max_lag_to_check = st.number_input("כמה נרות לבדוק אחורה/קדימה (Lag)?", min_value=1, max_value=20, value=6)
+            else:
+                max_lag_to_check = 0 # 0 אומר שלא בודקים השהיות אחורה/קדימה, מה שהופך את הסריקה למהירה מאוד
 
         days_back = st.number_input("כמה ימים אחורה לנתח?", min_value=1, max_value=max_days, value=default_days)
     
@@ -342,39 +348,43 @@ if mode == "5. סורק שוק מורחב (מי מוביל את המניה?)":
     
     st.info(f"""
     **סקירה נרחבת מול כ-{len(SCANNER_BASKET)} נכסים ומדדים!**
-    המערכת סורקת כעת את מניית המטרה שלך מול רשימה של מעל 100 מניות נבחרות (מת"א 125, מדדים גלובליים ודולר-שקל).
+    המערכת מוכנה לסרוק את מניית המטרה שלך מול רשימה של מעל 100 מניות נבחרות (מת"א 125, מדדים גלובליים ודולר-שקל).
     
-    ⏳ **זמן משוער:** כדקה. הסריקה מבוצעת בדיוק על פי הטווחים והימים שהוגדרו (רזולוציה: {interval_choice}, ימים אחורה: {days_back}).
+    ⏳ **רזולוציה:** {interval_choice}, **ימים אחורה:** {days_back}.
+    {'⚠️ **סריקה עם השהיות (Lag) מופעלת** - הפעולה עשויה לקחת קצת זמן.' if use_lag else '⚡ **סריקה מהירה** (ללא השהיות) מופעלת.'}
     """)
     
-    with st.spinner("שואב נתונים ומחשב קורלציות מתקדמות... אנא המתן."):
-        scanner_results = run_market_scanner(
-            ticker1_tuple, 
-            SCANNER_BASKET, 
-            days_back, 
-            interval_choice, 
-            max_lag_to_check, 
-            use_log_returns
-        )
-    
-    if not scanner_results.empty:
-        def color_corr(val):
-            if isinstance(val, float):
-                color = '#047857' if val > 0.4 else '#b91c1c' if val < -0.4 else 'black'
-                return f'color: {color}; font-weight: bold;'
-            return ''
-            
-        st.dataframe(
-            scanner_results.style.map(color_corr, subset=['קורלציה מקסימלית']).format({'קורלציה מקסימלית': '{:.3f}'}),
-            use_container_width=True,
-            height=600
-        )
+    # הוספת לחצן ההפעלה
+    if st.button("🚀 התחל סריקת שוק עכשיו", type="primary", use_container_width=True):
         
-        best_asset = scanner_results.iloc[0]
-        st.success(f"🏆 **הנכס המשפיע ביותר על מניית המטרה:** {best_asset['נכס השוואה']} (קורלציה: {best_asset['קורלציה מקסימלית']:.3f}). \n\n**תזמון:** {best_asset['משמעות']}.")
-    else:
-        st.warning("לא נמצאו מספיק נתונים לחישוב הסריקה. נסה להגדיל את כמות הימים או לבדוק את הטיקר.")
-    
+        with st.spinner("שואב נתונים ומחשב קורלציות מתקדמות... אנא המתן."):
+            scanner_results = run_market_scanner(
+                ticker1_tuple, 
+                SCANNER_BASKET, 
+                days_back, 
+                interval_choice, 
+                max_lag_to_check, 
+                use_log_returns
+            )
+        
+        if not scanner_results.empty:
+            def color_corr(val):
+                if isinstance(val, float):
+                    color = '#047857' if val > 0.4 else '#b91c1c' if val < -0.4 else 'black'
+                    return f'color: {color}; font-weight: bold;'
+                return ''
+                
+            st.dataframe(
+                scanner_results.style.map(color_corr, subset=['קורלציה מקסימלית']).format({'קורלציה מקסימלית': '{:.3f}'}),
+                use_container_width=True,
+                height=600
+            )
+            
+            best_asset = scanner_results.iloc[0]
+            st.success(f"🏆 **הנכס המשפיע ביותר על מניית המטרה:** {best_asset['נכס השוואה']} (קורלציה: {best_asset['קורלציה מקסימלית']:.3f}). \n\n**תזמון:** {best_asset['משמעות']}.")
+        else:
+            st.warning("לא נמצאו מספיק נתונים לחישוב הסריקה. נסה להגדיל את כמות הימים או לבדוק את הטיקר.")
+            
     st.stop() # עוצר כאן כדי לא להציג את הגרפים הרגילים של מצבים 1-4
 
 # ==========================================
