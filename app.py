@@ -515,7 +515,7 @@ with t2:
 st.divider()
 st.markdown("""
 <div style='text-align: center; color: #64748b; font-size: 0.85rem; padding-top: 1rem; padding-bottom: 2rem; direction: rtl;'>
-    האתר לצורכי מחקר, ועל אחריות המשתמש. השעות המוצגות הן שעון ישראל.<br>
-    לשיתופי פעולה ניתן לפנות ליוצר במייל: <a href="mailto:147590@gmail.com" style="color: #3b82f6; text-decoration: none;">147590@gmail.com</a>
+    האתר לצורכי מחקר, ועל אחריות המשתמש. השעות המוצגות הן לפי שעון ישראל.<br>
+    לשיתופי פעולה ניתן לפנות ליוצר במייל: <a href="mailto:147590@gmail.com" style="color: #3b82f6; text-decoration: none;" dir="ltr">147590@gmail.com</a>
 </div>
 """, unsafe_allow_html=True)
