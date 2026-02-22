@@ -273,6 +273,9 @@ def run_market_scanner(target_tuple, basket_dict, days, interval_str, max_lags, 
     s_target = np.log(df_target['close'] / df_target['close'].shift(1)) if is_log else df_target['close'].pct_change()
     s_target = s_target.dropna()
 
+    # הגדרת סף דינמי לתצפיות: חייבים לפחות 75% מכמות הנרות של מניית המטרה
+    min_required_obs = max(30, int(len(s_target) * 0.75))
+
     results = []
     items = list(basket_dict.items())
     
@@ -291,8 +294,9 @@ def run_market_scanner(target_tuple, basket_dict, days, interval_str, max_lags, 
                 s_asset = np.log(df_asset['close'] / df_asset['close'].shift(1)) if is_log else df_asset['close'].pct_change()
                 aligned = pd.DataFrame({"target": s_target, "asset": s_asset}).dropna()
                 
-                # סינון מניות לא סחירות: אם ליותר מ-25% מהנרות יש שינוי של 0%, זו מניה בעייתית
-                if len(aligned) > 30 and (aligned["asset"] == 0).mean() < 0.25 and aligned["asset"].std() > 0:
+                # סינון 1: חפיפה מספקת של נתונים (לפחות 75% ממניית המטרה)
+                # סינון 2: מניות לא סחירות (מניעת ימים של 0% שינוי)
+                if len(aligned) >= min_required_obs and (aligned["asset"] == 0).mean() < 0.25 and aligned["asset"].std() > 0:
                     best_lag = 0
                     best_corr = 0
                     best_n = 0
@@ -300,14 +304,16 @@ def run_market_scanner(target_tuple, basket_dict, days, interval_str, max_lags, 
                     for lag in range(-max_lags, max_lags + 1):
                         shifted = aligned["asset"].shift(lag)
                         temp = pd.DataFrame({"target": aligned["target"], "asset": shifted}).dropna()
-                        if len(temp) > 30:
+                        
+                        # מוודאים שגם אחרי ההשהיה יש מספיק נתונים
+                        if len(temp) >= (min_required_obs - abs(lag)):
                             c, _ = stats.pearsonr(temp["target"], temp["asset"])
                             if abs(c) > abs(best_corr):
                                 best_corr = c
                                 best_lag = lag
                                 best_n = len(temp)
 
-                    # הוספה לטבלה רק אם יש קורלציה של לפחות 0.20 (סינון הקורלציות החלשות מאוד)
+                    # הוספה לטבלה רק אם יש קורלציה של לפחות 0.20
                     if abs(best_corr) >= 0.20:
                         time_unit = "דקות" if 'm' in interval_str else "ימים"
                         mins = int(interval_str.replace('m','')) if 'm' in interval_str else 1
