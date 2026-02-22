@@ -1,9 +1,7 @@
 streamlit
-yfinance
 pandas
+numpy
 plotly
-statsmodels
 scipy
 openpyxl
-numpy
 tvDatafeed
