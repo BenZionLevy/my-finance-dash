@@ -89,7 +89,7 @@ DEFAULT_TICKERS = {
     "USD/ILS": ("USDILS", "FX_IDC")
 }
 
-# סל נכסים עבור אופציית הסורק (מצב 5)
+# סל של ~100 מניות ונכסים עבור אופציית הסורק (מצב 5)
 SCANNER_BASKET = {
     "S&P 500 (חוזה עתידי)": ("ES1!", "CME_MINI"),
     "NASDAQ 100 (חוזה עתידי)": ("NQ1!", "CME_MINI"),
@@ -99,18 +99,36 @@ SCANNER_BASKET = {
     "מדד ת\"א 125": ("TA125", "TASE"),
     "מדד הבנקים": ("TA_BANKS5", "TASE"),
     "מדד נדל\"ן": ("TA_REALESTATE", "TASE"),
-    "לאומי": ("LUMI", "TASE"),
-    "פועלים": ("POLI", "TASE"),
-    "דיסקונט": ("DSCT", "TASE"),
-    "מזרחי טפחות": ("MZTF", "TASE"),
-    "בינלאומי": ("FIBI", "TASE"),
-    "נייס": ("NICE", "TASE"),
-    "טבע": ("TEVA", "TASE"),
-    "אלביט מערכות": ("ESLT", "TASE"),
-    "קבוצת עזריאלי": ("AZRG", "TASE"),
-    "איי.סי.אל": ("ICL", "TASE"),
-    "הפניקס": ("PHOE", "TASE")
-    # ניתן להוסיף כאן עוד מניות מה-125...
+    "לאומי": ("LUMI", "TASE"), "פועלים": ("POLI", "TASE"), "דיסקונט": ("DSCT", "TASE"),
+    "מזרחי טפחות": ("MZTF", "TASE"), "בינלאומי": ("FIBI", "TASE"), 
+    "טבע": ("TEVA", "TASE"), "נייס": ("NICE", "TASE"), "אלביט מערכות": ("ESLT", "TASE"),
+    "איי.סי.אל": ("ICL", "TASE"), "קבוצת עזריאלי": ("AZRG", "TASE"),
+    "טאואר": ("TSEM", "TASE"), "נובה": ("NVMI", "TASE"), "קמטק": ("CAMT", "TASE"),
+    "הפניקס": ("PHOE", "TASE"), "הראל השקעות": ("HREL", "TASE"),
+    "מליסרון": ("MLSR", "TASE"), "אלוני חץ": ("ALHE", "TASE"), "מבנה": ("MVNE", "TASE"),
+    "אמות": ("AMOT", "TASE"), "בזק": ("BEZQ", "TASE"), "שופרסל": ("SAE", "TASE"),
+    "שטראוס": ("STRS", "TASE"), "פז נפט": ("PZOL", "TASE"), "דלק קבוצה": ("DLEKG", "TASE"),
+    "אנרג'יאן": ("ENOG", "TASE"), "שפיר הנדסה": ("SPEN", "TASE"), "אל על": ("ELAL", "TASE"),
+    "ישראמקו": ("ISRA.L", "TASE"), "אורמת טכנו": ("ORA", "TASE"), "שיכון ובינוי": ("SKBN", "TASE"),
+    "אשטרום קבוצה": ("ASHG", "TASE"), "מגדל ביטוח": ("MGDL", "TASE"), "כלל עסקי ביטוח": ("CLIS", "TASE"),
+    "דניה סיבוס": ("DANY", "TASE"), "פוקס": ("FOX", "TASE"), "אלקטרה": ("ELTR", "TASE"),
+    "תדיראן גרופ": ("TDIR", "TASE"), "איתוראן": ("ITRN", "TASE"), "חילן": ("HLAN", "TASE"),
+    "מטריקס": ("MTRX", "TASE"), "מלם תים": ("MLTM", "TASE"), "אודיוקודס": ("AUDC", "TASE"),
+    "וואן טכנולוגיות": ("ONE", "TASE"), "דלתא מותגים": ("DLTI", "TASE"), "גב ים": ("GVAM", "TASE"),
+    "ריט 1": ("RIT1", "TASE"), "פרשקובסקי": ("PRSK", "TASE"), "אפריקה מגורים": ("AFRE", "TASE"),
+    "ישראל קנדה": ("ISCN", "TASE"), "אקרו": ("ACRO", "TASE"), "דיפלומה": ("DIPL", "TASE"),
+    "אאורה": ("AURA", "TASE"), "רמי לוי": ("RMLI", "TASE"), "קרסו מוטורס": ("CRSO", "TASE"), 
+    "דלק רכב": ("DLEA", "TASE"), "מנורה מבטחים": ("MMHD", "TASE"), "ישראכרט": ("ISCD", "TASE"),
+    "מימון ישיר": ("DIFI", "TASE"), "ביג": ("BIG", "TASE"), "אינרום": ("INRM", "TASE"), 
+    "אפי נכסים": ("AFPR", "TASE"), "הכשרת הישוב": ("ILDC", "TASE"), "חג'ג'": ("HGG", "TASE"), 
+    "י.ח דמרי": ("DIMRI", "TASE"), "נכסים ובנין": ("PTBL", "TASE"), "סלע נדלן": ("SLAR", "TASE"), 
+    "קרדן נדלן": ("KRDL", "TASE"), "רוטשטיין": ("ROTS", "TASE"), "רני צים": ("RNZM", "TASE"), 
+    "אנלייט אנרגיה": ("ENLT", "TASE"), "אנרג'יקס": ("ENRG", "TASE"), "משק אנרגיה": ("MSKE", "TASE"), 
+    "דוראל אנרגיה": ("DORL", "TASE"), "נופר אנרגיה": ("NOFR", "TASE"), "אלקו": ("ELCO", "TASE"), 
+    "ארד": ("ARD", "TASE"), "קליל": ("KLIL", "TASE"), "רב בריח": ("RVBR", "TASE"), 
+    "קסטרו": ("CAST", "TASE"), "גולף": ("GOLF", "TASE"), "המשביר לצרכן": ("MSBR", "TASE"), 
+    "טיב טעם": ("TIVT", "TASE"), "יוחננוף": ("YHNF", "TASE"), "ויקטורי": ("VCTR", "TASE"), 
+    "מקס סטוק": ("MAXO", "TASE"), "אלטשולר שחם": ("ALTF", "TASE"), "פריורטק": ("PRTC", "TASE")
 }
 
 st.markdown("<div class='section-title'>⚙️ שלב 1: הגדרות הניתוח</div>", unsafe_allow_html=True)
@@ -241,7 +259,7 @@ def calculate_returns(df, is_log):
     if is_log: return np.log(df / df.shift(1))
     return df.pct_change()
 
-# פונקציה לסריקת שוק מרובה נכסים (ללא Cache כדי שה-Progress Bar יעבוד בצורה חלקה)
+# פונקציה לסריקת שוק מרובה נכסים
 def run_market_scanner(target_tuple, basket_dict, days, interval_str, max_lags, is_log):
     tv = TvDatafeed()
     tv_intervals = {"1d": Interval.in_daily, "5m": Interval.in_5_minute, "15m": Interval.in_15_minute, "30m": Interval.in_30_minute, "60m": Interval.in_1_hour}
@@ -249,7 +267,6 @@ def run_market_scanner(target_tuple, basket_dict, days, interval_str, max_lags, 
     bars_per_day = 1 if interval_str == "1d" else (8 * 60) // int(interval_str.replace('m',''))
     total_bars = min(days * bars_per_day, 4900)
 
-    # משיכת מניית המטרה
     df_target = tv.get_hist(symbol=target_tuple[0], exchange=target_tuple[1], interval=inter, n_bars=total_bars)
     if df_target is None or df_target.empty: return pd.DataFrame()
     s_target = np.log(df_target['close'] / df_target['close'].shift(1)) if is_log else df_target['close'].pct_change()
@@ -262,6 +279,11 @@ def run_market_scanner(target_tuple, basket_dict, days, interval_str, max_lags, 
     status_text = st.empty()
 
     for i, (name, sym_tuple) in enumerate(items):
+        # מניעת השוואה של הנכס לעצמו בטבלה
+        if sym_tuple[0] == target_tuple[0] and sym_tuple[1] == target_tuple[1]:
+            progress_bar.progress((i + 1) / len(items))
+            continue
+            
         status_text.text(f"🔍 בודק קורלציה מול: {name}...")
         try:
             df_asset = tv.get_hist(symbol=sym_tuple[0], exchange=sym_tuple[1], interval=inter, n_bars=total_bars)
@@ -302,7 +324,7 @@ def run_market_scanner(target_tuple, basket_dict, days, interval_str, max_lags, 
         except: pass
             
         progress_bar.progress((i + 1) / len(items))
-        time.sleep(0.1) # מניעת חסימה משרתי TradingView
+        time.sleep(0.1)
 
     status_text.empty()
     progress_bar.empty()
@@ -317,9 +339,15 @@ def run_market_scanner(target_tuple, basket_dict, days, interval_str, max_lags, 
 # ==========================================
 if mode == "5. סורק שוק מורחב (מי מוביל את המניה?)":
     st.markdown(f"<div class='section-title'>🌍 סורק שוק גלובלי: מי מזיז את {asset1_name}?</div>", unsafe_allow_html=True)
-    st.info(f"מריץ סריקה של **{asset1_name}** מול סל של {len(SCANNER_BASKET)} נכסים ומדדים. התהליך עשוי לקחת מספר שניות.")
     
-    with st.spinner("שואב נתונים ומחשב קורלציות מתקדמות..."):
+    st.info(f"""
+    **סקירה נרחבת מול כ-{len(SCANNER_BASKET)} נכסים ומדדים!**
+    המערכת סורקת כעת את מניית המטרה שלך מול רשימה של מעל 100 מניות נבחרות (מת"א 125, מדדים גלובליים ודולר-שקל).
+    
+    ⏳ **זמן משוער:** כדקה. הסריקה מבוצעת בדיוק על פי הטווחים והימים שהוגדרו (רזולוציה: {interval_choice}, ימים אחורה: {days_back}).
+    """)
+    
+    with st.spinner("שואב נתונים ומחשב קורלציות מתקדמות... אנא המתן."):
         scanner_results = run_market_scanner(
             ticker1_tuple, 
             SCANNER_BASKET, 
@@ -339,11 +367,11 @@ if mode == "5. סורק שוק מורחב (מי מוביל את המניה?)":
         st.dataframe(
             scanner_results.style.map(color_corr, subset=['קורלציה מקסימלית']).format({'קורלציה מקסימלית': '{:.3f}'}),
             use_container_width=True,
-            height=450
+            height=600
         )
         
         best_asset = scanner_results.iloc[0]
-        st.success(f"🏆 **הנכס המשפיע ביותר:** {best_asset['נכס השוואה']} (קורלציה: {best_asset['קורלציה מקסימלית']:.3f}). \n\n**תזמון:** {best_asset['משמעות']}.")
+        st.success(f"🏆 **הנכס המשפיע ביותר על מניית המטרה:** {best_asset['נכס השוואה']} (קורלציה: {best_asset['קורלציה מקסימלית']:.3f}). \n\n**תזמון:** {best_asset['משמעות']}.")
     else:
         st.warning("לא נמצאו מספיק נתונים לחישוב הסריקה. נסה להגדיל את כמות הימים או לבדוק את הטיקר.")
     
