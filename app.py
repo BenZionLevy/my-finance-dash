@@ -7,7 +7,6 @@ import plotly.graph_objects as go
 from scipy import stats
 import io
 from openpyxl.utils import get_column_letter
-from openpyxl.styles import Font, PatternFill
 
 st.set_page_config(page_title="ניתוח קורלציות מקצועי", layout="wide", page_icon="📊")
 
@@ -19,7 +18,7 @@ def safe_round(val, mult=1.0):
     return round(float(val) * mult, 2)
 
 # ==========================================
-# עיצוב CSS מותאם אישית (עיצוב Rubik ונקי)
+# עיצוב CSS מותאם אישית (עם התאמה לנייד)
 # ==========================================
 st.markdown("""
 <style>
@@ -31,14 +30,6 @@ st.markdown("""
     html, body, [class*="css"] {
         font-family: 'Rubik', sans-serif;
         direction: rtl;
-    }
-    
-    /* היפוך חצים בתפריט צד */
-    [data-testid="collapsedControl"] svg,
-    [data-testid="baseButton-header"] svg,
-    [data-testid="baseButton-headerNoPadding"] svg,
-    button[kind="header"] svg {
-        transform: scaleX(-1) !important;
     }
 
     .main-header {
@@ -93,11 +84,34 @@ st.markdown("""
         margin-bottom: 2rem;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
     }
+
+    /* === התאמות למסכים קטנים (טלפונים ניידים) === */
+    @media (max-width: 768px) {
+        .main-header {
+            font-size: 1.8rem;
+            padding: 1rem 0 0.5rem 0;
+        }
+        .sub-header {
+            font-size: 0.95rem;
+        }
+        .info-box {
+            font-size: 0.95rem;
+            padding: 1rem;
+        }
+        .section-title {
+            font-size: 1.1rem;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# הגדרות נכסים (Sidebar)
+# כותרת ראשית (הוזזה למעלה לפני ההגדרות)
+# ==========================================
+st.markdown(f"<h1 class='main-header'>ניתוח קורלציות מקצועי</h1>", unsafe_allow_html=True)
+
+# ==========================================
+# הגדרות נכסים (בתוך חלונית נפתחת במקום תפריט צד)
 # ==========================================
 DEFAULT_TICKERS = {
     "לאומי": "LUMI.TA", "פועלים": "POLI.TA", "דיסקונט": "DSCT.TA",
@@ -105,72 +119,71 @@ DEFAULT_TICKERS = {
     "S&P 500 Futures": "ES=F", 'נאסד"ק 100': "NQ=F", "USD/ILS": "ILS=X", "XLF (פיננסים ארה\"ב)": "XLF"
 }
 
-with st.sidebar:
-    st.markdown("<h3 style='direction:rtl; text-align:right;'>🎛️ הגדרות ניתוח</h3>", unsafe_allow_html=True)
-    st.divider()
-
-    use_custom = st.checkbox("הזן טיקר חופשי (מתקדם)", value=False)
-    if use_custom:
-        custom1 = st.text_input("טיקר 1 (לדוגמה: AAPL)", value="AAPL").upper().strip()
-        custom2 = st.text_input("טיקר 2 (לדוגמה: MSFT)", value="MSFT").upper().strip()
-        asset1_name, asset2_name = custom1, custom2
-        ticker1_sym, ticker2_sym = custom1, custom2
-    else:
-        ticker_names = list(DEFAULT_TICKERS.keys())
-        asset1_name = st.selectbox("נכס 1", ticker_names, index=0)
-        asset2_name = st.selectbox("נכס 2", ticker_names, index=8)
-        ticker1_sym = DEFAULT_TICKERS[asset1_name]
-        ticker2_sym = DEFAULT_TICKERS[asset2_name]
-        
-    if ticker1_sym == ticker2_sym:
-        st.error("⚠️ בחרת את אותו נכס פעמיים. אנא בחר שני נכסים שונים.")
-        st.stop()
-
-    st.divider()
-    mode = st.radio("**מבנה הניתוח**", [
-        "1. יומי: שער סגירה רשמי", "2. יומי: שעה קבועה ביום",
-        "3. מהלך מסחר: חלון שעות", "4. תוך-יומי: קפיצות זמן"
-    ])
-
-    st.divider()
-    # תוספת מס' 1: סוג התשואה
-    return_type = st.radio("**סוג תשואה:**", ["אחוז שינוי רגיל (Simple)", "תשואה לוגריתמית (Log)"])
-    use_log_returns = "לוגריתמית" in return_type
+with st.expander("⚙️ הגדרות ניתוח", expanded=True):
+    col_opt1, col_opt2, col_opt3 = st.columns(3)
     
-    st.divider()
-    start_hour, end_hour, target_hour = None, None, None
-    interval_choice, lag_minutes = "1d", 0
-    
-    is_daily_mode = mode == "1. יומי: שער סגירה רשמי"
-    max_days = 730 if is_daily_mode else 60
-    default_days = 365 if is_daily_mode else 60
-
-    if mode == "2. יומי: שעה קבועה ביום":
-        target_hour = st.selectbox("בחר שעה קבועה:", [f"{h:02d}:00" for h in range(8, 23)], index=2)
-        interval_choice = "5m"
-    elif mode == "3. מהלך מסחר: חלון שעות" or mode == "4. תוך-יומי: קפיצות זמן":
-        col_t1, col_t2 = st.columns(2)
-        with col_t2: start_hour = st.selectbox("שעת התחלה:", [f"{h:02d}:00" for h in range(8, 23)], index=2)
-        with col_t1: end_hour = st.selectbox("שעת סיום:", [f"{h:02d}:00" for h in range(8, 23)], index=8)
-        if mode == "4. תוך-יומי: קפיצות זמן":
-            int_map = {"5 דקות": "5m", "15 דקות": "15m", "30 דקות": "30m", "1 שעה": "60m"}
-            interval_choice = int_map[st.selectbox("גודל קפיצה:", list(int_map.keys()))]
-            lag_minutes = st.number_input("השהיה קבועה לנכס 2 (דקות):", min_value=0, max_value=600, value=0, step=5)
+    with col_opt1:
+        st.markdown("**1️⃣ בחירת נכסים**")
+        use_custom = st.checkbox("הזן טיקר חופשי (מתקדם)", value=False)
+        if use_custom:
+            custom1 = st.text_input("טיקר 1 (לדוגמה: AAPL)", value="AAPL").upper().strip()
+            custom2 = st.text_input("טיקר 2 (לדוגמה: MSFT)", value="MSFT").upper().strip()
+            asset1_name, asset2_name = custom1, custom2
+            ticker1_sym, ticker2_sym = custom1, custom2
         else:
-            interval_choice = "5m"
+            ticker_names = list(DEFAULT_TICKERS.keys())
+            asset1_name = st.selectbox("נכס 1", ticker_names, index=0)
+            asset2_name = st.selectbox("נכס 2", ticker_names, index=8)
+            ticker1_sym = DEFAULT_TICKERS[asset1_name]
+            ticker2_sym = DEFAULT_TICKERS[asset2_name]
+            
+        if ticker1_sym == ticker2_sym:
+            st.error("⚠️ בחרת את אותו נכס פעמיים. אנא בחר שני נכסים שונים.")
+            st.stop()
 
-    days_back = st.number_input("ימים אחורה:", min_value=1, max_value=max_days, value=default_days)
+    with col_opt2:
+        st.markdown("**2️⃣ זמנים וסוג תשואה**")
+        mode = st.radio("מבנה הניתוח:", [
+            "1. יומי: שער סגירה רשמי", "2. יומי: שעה קבועה ביום",
+            "3. מהלך מסחר: חלון שעות", "4. תוך-יומי: קפיצות זמן"
+        ])
+        return_type = st.radio("סוג תשואה:", ["אחוז שינוי רגיל (Simple)", "תשואה לוגריתמית (Log)"])
+        use_log_returns = "לוגריתמית" in return_type
 
-    st.divider()
-    show_rolling = st.checkbox("הצג גרף Rolling Correlation", value=True)
-    if show_rolling:
-        rolling_window = st.slider("חלון Rolling (מספר תצפיות):", min_value=5, max_value=100, value=20)
+    with col_opt3:
+        st.markdown("**3️⃣ חלון זמן ומתקדם**")
+        start_hour, end_hour, target_hour = None, None, None
+        interval_choice, lag_minutes = "1d", 0
         
+        is_daily_mode = mode == "1. יומי: שער סגירה רשמי"
+        max_days = 730 if is_daily_mode else 60
+        default_days = 365 if is_daily_mode else 60
+
+        if mode == "2. יומי: שעה קבועה ביום":
+            target_hour = st.selectbox("בחר שעה קבועה:", [f"{h:02d}:00" for h in range(8, 23)], index=2)
+            interval_choice = "5m"
+        elif mode == "3. מהלך מסחר: חלון שעות" or mode == "4. תוך-יומי: קפיצות זמן":
+            start_hour = st.selectbox("שעת התחלה:", [f"{h:02d}:00" for h in range(8, 23)], index=2)
+            end_hour = st.selectbox("שעת סיום:", [f"{h:02d}:00" for h in range(8, 23)], index=8)
+            if mode == "4. תוך-יומי: קפיצות זמן":
+                int_map = {"5 דקות": "5m", "15 דקות": "15m", "30 דקות": "30m", "1 שעה": "60m"}
+                interval_choice = int_map[st.selectbox("גודל קפיצה:", list(int_map.keys()))]
+                lag_minutes = st.number_input("השהיה לנכס 2 (דקות):", min_value=0, max_value=600, value=0, step=5)
+            else:
+                interval_choice = "5m"
+
+        days_back = st.number_input("ימים אחורה:", min_value=1, max_value=max_days, value=default_days)
+    
     st.divider()
-    # תוספת מס' 2: הפעלת מפת CCF
-    show_ccf = st.checkbox("🔍 הצג מפת הובלה (Cross-Correlation)", value=False)
-    if show_ccf:
-        ccf_max_lag = st.slider("מספר השהיות (Lags) לבדיקה:", min_value=1, max_value=20, value=10)
+    c_adv1, c_adv2 = st.columns(2)
+    with c_adv1:
+        show_rolling = st.checkbox("הצג גרף Rolling Correlation", value=True)
+        if show_rolling:
+            rolling_window = st.slider("חלון Rolling:", min_value=5, max_value=100, value=20)
+    with c_adv2:
+        show_ccf = st.checkbox("🔍 הצג מפת הובלה (Cross-Correlation)", value=False)
+        if show_ccf:
+            ccf_max_lag = st.slider("מספר השהיות לבדיקה:", min_value=1, max_value=20, value=10)
 
 # ==========================================
 # פונקציות חישוב ומשיכה
@@ -327,7 +340,6 @@ elif mode == "4. תוך-יומי: קפיצות זמן":
 # ==========================================
 # תצוגת האתר
 # ==========================================
-st.markdown(f"<h1 class='main-header'>ניתוח קורלציות מקצועי</h1>", unsafe_allow_html=True)
 st.markdown(f"<p class='sub-header'><span dir='ltr'><b>{asset1_name}</b></span> מול <span dir='ltr'><b>{asset2_name}</b></span> | {days_back} ימים אחורה | שעון ישראל</p>", unsafe_allow_html=True)
 
 if scatter_df.empty or len(scatter_df) < 3:
@@ -369,7 +381,6 @@ if show_ccf and len(scatter_df) > ccf_max_lag * 2:
     corrs = []
     
     for lag in lags:
-        # הזזה שלילית משמעותה להביא את העתיד של B להווה של A (כדי לבדוק אם A מנבא את B)
         temp_b = scatter_df[col_b].shift(-lag)
         temp_df = pd.DataFrame({"a": scatter_df[col_a], "b": temp_b}).dropna()
         if len(temp_df) > 3:
@@ -381,7 +392,6 @@ if show_ccf and len(scatter_df) > ccf_max_lag * 2:
     ccf_df = pd.DataFrame({"השהיה (Lag)": lags, "קורלציה": corrs})
     fig_ccf = px.bar(ccf_df, x="השהיה (Lag)", y="קורלציה")
     
-    # צביעת העמודה המקסימלית באדום
     max_idx = ccf_df["קורלציה"].idxmax()
     best_lag = ccf_df.loc[max_idx, "השהיה (Lag)"]
     best_corr = ccf_df.loc[max_idx, "קורלציה"]
@@ -445,37 +455,13 @@ with t2:
             
             worksheet[f"{form_col_let}1"] = "קורלציה (אקסל חי)"
             worksheet[f"{form_col_let}2"] = f"=CORREL({c1_let}2:{c1_let}{num_rows+1}, {c2_let}2:{c2_let}{num_rows+1})"
-            worksheet[f"{form_col_let}4"] = "תצפיות משותפות בפועל"
-            worksheet[f"{form_col_let}5"] = f"=SUMPRODUCT(--ISNUMBER({c1_let}2:{c1_let}{num_rows+1}), --ISNUMBER({c2_let}2:{c2_let}{num_rows+1}))"
-            
-            worksheet[f"{form_col_let}1"].font = Font(bold=True)
-            worksheet[f"{form_col_let}4"].font = Font(bold=True)
-            worksheet[f"{form_col_let}2"].fill = PatternFill(start_color="D1FAE5", end_color="D1FAE5", fill_type="solid")
-            worksheet[f"{form_col_let}5"].fill = PatternFill(start_color="DBEAFE", end_color="DBEAFE", fill_type="solid")
-        except ValueError:
+        except Exception as e:
             pass
 
-    st.download_button(label="📥 הורד נתונים (Excel) + נוסחאות", data=buffer.getvalue(), file_name=f"correlation_{asset1_name}_{asset2_name}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
-    
-    end_ts = int(pd.Timestamp.now().timestamp())
-    start_ts = int((pd.Timestamp.now() - pd.Timedelta(days=days_back)).timestamp())
-    l1 = f"https://finance.yahoo.com/chart/{ticker1_sym}?period1={start_ts}&period2={end_ts}&interval={interval_choice}"
-    l2 = f"https://finance.yahoo.com/chart/{ticker2_sym}?period1={start_ts}&period2={end_ts}&interval={interval_choice}"
-    
-    st.markdown(f"""
-    <div dir='rtl' style='margin-top: 15px;'>
-        <a href='{l1}' target='_blank' style='text-decoration:none; color:#1e40af;'>🔗 אימות גרף ב-Yahoo: <span dir='ltr'><b>{asset1_name}</b></span></a><br><br>
-        <a href='{l2}' target='_blank' style='text-decoration:none; color:#1e40af;'>🔗 אימות גרף ב-Yahoo: <span dir='ltr'><b>{asset2_name}</b></span></a>
-    </div>
-    """, unsafe_allow_html=True)
-
-st.divider()
-st.markdown(
-    """
-    <div style='text-align: center; color: #475569; font-size: 1.05rem; direction: rtl; padding: 15px; background-color: rgba(255,255,255,0.8); border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05);'>
-        <strong>האתר לצורכי מחקר, ועל אחריות המשתמש.</strong><br>
-        לשיתופי פעולה ניתן לפנות לטלפון: <span dir='ltr' style='font-weight:600;'>054-8810248</span>
-    </div>
-    """, 
-    unsafe_allow_html=True
-)
+    st.download_button(
+        label="📥 הורד נתונים לאקסל",
+        data=buffer,
+        file_name=f"correlation_{ticker1_sym}_{ticker2_sym}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True
+    )
