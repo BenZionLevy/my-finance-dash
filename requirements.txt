@@ -5,3 +5,5 @@ plotly
 statsmodels
 scipy
 openpyxl
+numpy
+tvDatafeed
