@@ -132,7 +132,7 @@ SCANNER_BASKET = {
     "מקס סטוק": ("MAXO", "TASE"), "אלטשולר שחם": ("ALTF", "TASE"), "פריורטק": ("PRTC", "TASE")
 }
 
-# רשימת נכסי מאקרו שיכנסו תמיד לטבלה, גם אם הקורלציה שלהם נמוכה
+# רשימת נכסי מאקרו שיכנסו תמיד לטבלה, גם אם הקורלציה שלהם נמוכה, ופטורים ממבחן הסחירות הנוקשה
 MACRO_ASSETS = [
     "S&P 500 (חוזה עתידי)", 
     "NASDAQ 100 (חוזה עתידי)", 
@@ -211,7 +211,6 @@ with st.expander("לחץ כאן לפתיחה/סגירה של פאנל ההגדר
         elif mode == "5. סורק שוק מורחב (מי מוביל את המניה?)":
             int_map = {"5 דקות": "5m", "15 דקות": "15m", "30 דקות": "30m", "1 שעה": "60m", "יומי": "1d"}
             interval_choice = int_map[st.selectbox("רזולוציית סריקה:", list(int_map.keys()), index=0)]
-            # הסורק תמיד רץ עם השהיות עכשיו, לפי מספר הנרות שהוזן
             max_lag_to_check = st.number_input("כמה נרות לבדוק אחורה/קדימה (Lag)?", min_value=1, max_value=20, value=6)
 
         days_back = st.number_input("כמה ימים אחורה לנתח?", min_value=1, max_value=max_days, value=default_days)
@@ -286,8 +285,8 @@ def run_market_scanner(target_tuple, basket_dict, days, interval_str, max_lags, 
     s_target = np.log(df_target['close'] / df_target['close'].shift(1)) if is_log else df_target['close'].pct_change()
     s_target = s_target.dropna()
 
-    # הגדרת סף דינמי לתצפיות: חייבים לפחות 75% מכמות הנרות של מניית המטרה
-    min_required_obs = max(30, int(len(s_target) * 0.75))
+    # שינוי משמעותי: הורדת סף החפיפה ל-50% בלבד כדי לאפשר למניות ישראל (ראשון-חמישי) ומדדי ארה"ב (שני-שישי) להצטלב
+    min_required_obs = max(30, int(len(s_target) * 0.50))
 
     results = []
     items = list(basket_dict.items())
@@ -307,9 +306,13 @@ def run_market_scanner(target_tuple, basket_dict, days, interval_str, max_lags, 
                 s_asset = np.log(df_asset['close'] / df_asset['close'].shift(1)) if is_log else df_asset['close'].pct_change()
                 aligned = pd.DataFrame({"target": s_target, "asset": s_asset}).dropna()
                 
-                # סינון 1: חפיפה מספקת של נתונים
-                # סינון 2: מניות לא סחירות (מניעת ימים של 0% שינוי)
-                if len(aligned) >= min_required_obs and (aligned["asset"] == 0).mean() < 0.25 and aligned["asset"].std() > 0:
+                is_macro = name in MACRO_ASSETS
+                
+                has_enough_data = len(aligned) >= min_required_obs
+                is_tradable = (aligned["asset"] == 0).mean() < 0.33 and aligned["asset"].std() > 0
+                
+                # נכסי מאקרו (כמו דולר שיש לו הרבה שעות ללא תנועה) עוקפים את מבחן הסחירות ונכנסים אוטומטית אם יש להם מינימום תצפיות
+                if (has_enough_data and is_tradable) or (is_macro and len(aligned) >= 30):
                     best_lag = 0
                     best_corr = 0
                     best_n = 0
@@ -318,7 +321,7 @@ def run_market_scanner(target_tuple, basket_dict, days, interval_str, max_lags, 
                         shifted = aligned["asset"].shift(lag)
                         temp = pd.DataFrame({"target": aligned["target"], "asset": shifted}).dropna()
                         
-                        if len(temp) >= (min_required_obs - abs(lag)):
+                        if len(temp) >= (min_required_obs - abs(lag)) or (is_macro and len(temp) >= 30):
                             c, _ = stats.pearsonr(temp["target"], temp["asset"])
                             if abs(c) > abs(best_corr):
                                 best_corr = c
@@ -326,8 +329,6 @@ def run_market_scanner(target_tuple, basket_dict, days, interval_str, max_lags, 
                                 best_n = len(temp)
 
                     # הוספה לטבלה אם הקורלציה גבוהה מ-0.20 או אם מדובר בנכס מאקרו שהגדרנו מראש
-                    is_macro = name in MACRO_ASSETS
-                    
                     if abs(best_corr) >= 0.20 or is_macro:
                         time_unit = "דקות" if 'm' in interval_str else "ימים"
                         mins = int(interval_str.replace('m','')) if 'm' in interval_str else 1
