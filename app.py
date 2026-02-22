@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import statsmodels.api as sm
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
@@ -397,6 +398,78 @@ if mode == "5. סורק שוק מורחב (מי מוביל את המניה?)":
             st.warning("לא נמצאו מספיק נתונים לחישוב הסריקה. נסה להגדיל את כמות הימים או לבדוק את הטיקר.")
             
     st.stop() # עוצר כאן כדי לא להציג את הגרפים הרגילים של מצבים 1-4
+
+# ==========================================
+            # המשך למצב 5: מודל השפעה משולבת
+            # ==========================================
+            st.divider()
+            st.markdown("<div class='section-title'>🧠 השפעה משולבת (רגרסיה מרובה)</div>", unsafe_allow_html=True)
+            st.info("כאן נבדוק כמה אחוזים מהתנועה של המניה מוסברים על ידי שילוב של הנכסים המובילים יחד (Adjusted R-Squared), תוך שכל אחד מהם מוזז לזמן ההשהיה (Lag) המדויק שלו.")
+
+            max_assets_available = len(scanner_results)
+            num_to_include = st.slider("כמה נכסים מראש הטבלה לשלב במודל?", min_value=2, max_value=max_assets_available, value=min(10, max_assets_available))
+            st.caption("💡 טיפ סטטיסטי: שילוב של עשרות נכסים בעלי קורלציה גבוהה בינם לבין עצמם עלול לעוות את המודל (קוליניאריות). מומלץ להתמקד בטופ 5-15.")
+
+            if st.button("🔮 חשב מודל משולב עכשיו", type="primary"):
+                with st.spinner("אוסף נתונים, מזיז לפי זמני ההשהיה (Lag) ובונה מודל סטטיסטי מורכב..."):
+                    assets_to_use = scanner_results.head(num_to_include)
+
+                    # משיכת נתוני מניית המטרה מחדש כעוגן
+                    df_target = fetch_data_tv(ticker1_tuple, ticker1_tuple, days_back, interval_choice)
+                    target_col = ticker1_tuple[0]
+                    target_returns = calculate_returns(df_target[target_col], use_log_returns).rename("Target")
+
+                    features = []
+                    for _, row in assets_to_use.iterrows():
+                        asset_name = row['נכס השוואה']
+                        lag = row['זמן השהיה (Lag)']
+                        sym_tuple = SCANNER_BASKET[asset_name]
+
+                        df_asset = fetch_data_tv(sym_tuple, sym_tuple, days_back, interval_choice)
+                        if not df_asset.empty:
+                            asset_col = sym_tuple[0]
+                            asset_ret = calculate_returns(df_asset[asset_col], use_log_returns)
+                            # הזזת הנתונים בדיוק לפי ה-Lag שנמצא בסריקה
+                            shifted_ret = asset_ret.shift(lag).rename(asset_name)
+                            features.append(shifted_ret)
+
+                    # איחוד כל הנתונים לטבלה אחת וניקוי שורות ללא חפיפה מלאה
+                    df_model = pd.concat([target_returns] + features, axis=1).dropna()
+
+                    if len(df_model) > num_to_include + 5: # וידוא שיש מספיק תצפיות ביחס למספר המשתנים
+                        y = df_model["Target"]
+                        X = df_model.drop(columns=["Target"])
+                        X = sm.add_constant(X)
+
+                        try:
+                            model = sm.OLS(y, X).fit()
+                            r_squared_adj = model.rsquared_adj
+
+                            st.success(f"🎯 **כוח הסבר משולב נטו (Adjusted R²): {r_squared_adj*100:.1f}%**")
+                            st.write(f"המודל נבנה על בסיס **{len(df_model)} תצפיות משותפות ורצופות** לאחר יישום ההשהיות של כולם.")
+
+                            summary_table = pd.DataFrame({
+                                "מקדם (השפעה נטו)": model.params,
+                                "P-Value": model.pvalues
+                            }).drop("const", errors="ignore")
+
+                            summary_table["מובהק בשילוב?"] = summary_table["P-Value"].apply(lambda p: "✅ כן" if p < 0.05 else "❌ לא (נבלע ע\"י אחרים)")
+
+                            # עיצוב הטבלה
+                            def style_pvalue(val):
+                                return 'color: #047857; font-weight: bold;' if "✅" in val else 'color: #b91c1c;'
+
+                            st.dataframe(
+                                summary_table.style
+                                .format({"מקדם (השפעה נטו)": "{:.4f}", "P-Value": "{:.4f}"})
+                                .map(style_pvalue, subset=["מובהק בשילוב?"]),
+                                use_container_width=True
+                            )
+
+                        except Exception as e:
+                            st.error(f"⚠️ שגיאה בחישוב המודל הסטטיסטי: {e}. ייתכן שיש קוליניאריות מוחלטת בין הנכסים שבחרת.")
+                    else:
+                        st.warning("❌ אין מספיק נתונים משותפים לבניית המודל לאחר יישום זמני ההשהיה של כל הנכסים יחד.")
 
 # ==========================================
 # עיבוד הנתונים למצבים 1 עד 4
